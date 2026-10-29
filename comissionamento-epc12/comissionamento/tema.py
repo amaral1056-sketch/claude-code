@@ -26,7 +26,31 @@ SELECAO = '#E3EDFB'
 TRILHA = '#E8EDF5'
 
 SERIE = ('#2A78D6', '#EB6834', '#1BAF7A')
+# pizzas: as 8 cores da paleta categórica de referência, em ordem fixa (cor segue o código de status, não a posição)
+PIZZA = ('#2A78D6', '#EB6834', '#1BAF7A', '#EDA100', '#E87BA4', '#008300', '#6250D6', '#E34948')
+PIZZA_NA = '#C3C9D2'          # N/A
+PIZZA_SEM = '#D9DEE6'         # sem status / sem registro
+PIZZA_OUTROS = '#8C95A3'      # demais códigos agrupados
 NEUTRO = '#CDD3DC'
+
+
+def cores_pizza(rotulos_fatias, ordem_oficial):
+    """Cor de cada fatia: segue o código (posição na lista oficial do documento), não o tamanho da fatia.
+    N/A, sem status/registro e 'Outros' ficam em cinzas. Usada na tela e no Excel."""
+    fixas = {'N/A': PIZZA_NA, 'Sem status': PIZZA_SEM, 'Sem registro': PIZZA_SEM, 'Sem dados importados': PIZZA_SEM,
+             'Outros': PIZZA_OUTROS}
+    pos = {c.upper(): i for i, c in enumerate(ordem_oficial)}
+    usadas, cores = set(), []
+    for rot in rotulos_fatias:
+        if rot in fixas:
+            cores.append(fixas[rot])
+            continue
+        i = pos.get(rot.upper(), len(ordem_oficial) + len(usadas)) % len(PIZZA)
+        while i in usadas and len(usadas) < len(PIZZA):
+            i = (i + 1) % len(PIZZA)
+        usadas.add(i)
+        cores.append(PIZZA[i])
+    return cores
 
 OK = '#1E7B34'
 OK_FUNDO = '#E7F5EA'

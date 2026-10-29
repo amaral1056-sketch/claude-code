@@ -32,7 +32,8 @@ def linha_de_comando(a):
                 print(f'VERIFICAR: {teste} = {apurado}')
         if a.exportar:
             exportacao.exportar_relatorio(R, a.exportar, servico.data_br(b.data_referencia_atual()),
-                                          servico.historico_com_percentuais(b), b.criterios(), b.incluir_sem_fvi)
+                                          servico.historico_com_percentuais(b), b.criterios(), b.incluir_sem_fvi,
+                                          b.status_fic())
             print('relatório:', a.exportar)
     except ErroImportacao as e:
         print('ERRO:', e, file=sys.stderr)

@@ -23,15 +23,15 @@ comissionamento/importacao.py leitura da LI, do Relatório de Cadastro Geral e d
 comissionamento/calculo.py   reprodução das fórmulas da planilha (IMP_* auxiliares, abas por SSOP/SOP, visão, verificação)
 comissionamento/servico.py   importar -> gravar -> recalcular -> histórico
 comissionamento/exportacao.py relatório Excel (valores formatados) e planilhas-modelo
-comissionamento/gui.py       interface CustomTkinter: barra lateral com logo, Visão Gerencial (só os 5 gráficos: FVI, FVM,
-                             TTAS, CCM, TAP – por unidade + Total), FVI TAG a TAG, FVM malha a malha, CCM/TAP/TTAS,
-                             Verificação, Histórico, Importações, Critérios. Filtros: Unidade → SOP → SSOP em cascata,
-                             + TAG/malha (FVI/FVM) ou situação (CCM/TAP/TTAS)
+comissionamento/gui.py       interface CustomTkinter: barra lateral com logo, botões Importar base / Importar atualização,
+                             Visão Gerencial (5 pizzas de status da FIC: FVI, FVM, CCM, TAP, TTAS – geral ou por unidade),
+                             FVI TAG a TAG, FVM malha a malha, CCM/TAP/TTAS (status da FIC), Verificação, Histórico,
+                             Importações, Critérios. Filtros: Unidade → SOP → SSOP em cascata + TAG/malha ou situação
 comissionamento/recursos/    logo.png (Consórcio HC4), icone.ico/icone.png – embutidos no .exe pelo .spec
 comissionamento/rotulos.py   TODOS os textos e colunas exibidos (tela e Excel), por extenso – sem abreviações
 comissionamento/tema.py      paleta suave, fontes e estilo das tabelas; cores de série validadas p/ daltonismo (3 cores)
 comissionamento/icones.py    ícones de linha padronizados (Pillow, 4x e reduzidos), recurso() e logo()
-comissionamento/graficos.py  gráficos em tk.Canvas (colunas agrupadas, linhas) com dica ao passar o mouse
+comissionamento/graficos.py  gráficos em tk.Canvas: Pizza (Pillow 4x), colunas agrupadas e linhas, com dica ao passar o mouse
 testes/                      sintético (12 casos de borda à mão), importação, interface, dados reais (pulado sem dados/)
 ci/teste_exe.py              testa o .exe gerado; .github/workflows/comissionamento-windows.yml gera o .exe no Windows
 ```
@@ -55,8 +55,15 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 - ci/teste_exe.py abre o .exe por linha de comando E a interface (variável EPC12_TESTE_INICIO); não remover.
 - Gráficos: no máximo 3 séries por gráfico (paleta validada só até 3 cores em todos os pares); legenda com 2+ séries
   (com uma só, o título identifica).
-- Layout das telas definido pelo usuário (29/10): Visão Gerencial só com gráficos; FVI/FVM sem coluna Situação;
-  CCM/TAP só com a situação; TTAS com "Situação TTAS 1/2"; menu Importar = SSOP, FVI, FVM, CCM, TAP, TTAS.
+- Layout das telas definido pelo usuário (29/10): Visão Gerencial = pizzas FVI, FVM, CCM, TAP, TTAS (nesta ordem, caixas
+  iguais); páginas de acompanhamento mostram o STATUS DA FIC como vem no arquivo (o avanço % continua pelos Critérios);
+  FVI/FVM sem coluna Situação; TTAS com "Situação TTAS 1/2"; Importar base = LI de SOP/SSOP, LI de Itens, LI de Malhas;
+  Importar atualização = FVI, FVM, CCM, TAP, TTAS.
+- Status exibido por SSOP/SOP (CCM, TAP, TTAS): registro aprovado > último válido do arquivo > cancelado > "Sem registro".
+  TTAS: status de etapa 2 (TTAS1 sem TTAS1APROVADO, ou TTAS2) ⇒ coluna TTAS 1 = TTAS1APROVADO (inferência, a confirmar).
+- FVM: uma malha PODE, mas NÃO DEVE, pertencer a mais de uma SSOP – conta em cada SSOP, é destacada e vai para a
+  Verificação (teste que deve dar 0). O mesmo teste vale para a LI de Malhas.
+- Cores das pizzas: tema.cores_pizza – a cor segue o código (lista oficial), cinzas para N/A/sem status/Outros; tela e Excel iguais.
 - Banco: cada importação substitui a anterior do tipo; o histórico guarda contagens por unidade por data de referência.
 
 ## Pendências (perguntas abertas ao usuário)
@@ -66,4 +73,5 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 4. Parâmetro de TAGs sem FVI no denominador: SIM ou NÃO – qual a gerência usa?
 5. Templates FVI/FVM/Preservação ainda não foram trazidos para o programa (continuam na planilha).
 6. TAGS SEM FVI por SSOP soma também TAGs canceladas (como a planilha); hoje não há TAG cancelada, sem efeito – confirmar a regra.
-7. Layouts reais de FVM, CCM, TAP e TTAS: ajustar `COLUNAS_PROVISORIAS` quando chegarem as exportações.
+7. Layouts reais de FVM, CCM, TAP, TTAS, LI de Itens e LI de Malhas: ajustar `COLUNAS_PROVISORIAS` quando chegarem.
+8. LI de Itens / LI de Malhas: hoje só conferidas na Verificação. Devem também alimentar o avanço (ex.: denominador)?

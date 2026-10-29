@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS fvm (linha INTEGER PRIMARY KEY, malha TEXT, sop TEXT,
 CREATE TABLE IF NOT EXISTS ccm (linha INTEGER PRIMARY KEY, numero TEXT, ssop TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS tap (linha INTEGER PRIMARY KEY, numero TEXT, ssop TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS ttas (linha INTEGER PRIMARY KEY, numero TEXT, sop TEXT, status TEXT);
+CREATE TABLE IF NOT EXISTS li_item (linha INTEGER PRIMARY KEY, tag TEXT, sop TEXT, ssop TEXT, descricao TEXT);
+CREATE TABLE IF NOT EXISTS li_malha (linha INTEGER PRIMARY KEY, malha TEXT, sop TEXT, ssop TEXT, descricao TEXT);
 CREATE TABLE IF NOT EXISTS criterio (
     id INTEGER PRIMARY KEY AUTOINCREMENT, etapa TEXT NOT NULL, codigo TEXT NOT NULL, origem TEXT,
     UNIQUE (etapa, codigo));
@@ -48,7 +50,9 @@ CREATE TABLE IF NOT EXISTS historico (
     PRIMARY KEY (data_referencia, unidade));
 """
 
-TABELAS_IMPORTACAO = {'FVI': 'fvi_tag', 'FVM': 'fvm', 'CCM': 'ccm', 'TAP': 'tap', 'TTAS': 'ttas'}
+TABELAS_IMPORTACAO = {'FVI': 'fvi_tag', 'FVM': 'fvm', 'CCM': 'ccm', 'TAP': 'tap', 'TTAS': 'ttas',
+                      'LI_ITENS': 'li_item', 'LI_MALHAS': 'li_malha'}
+TIPOS_FIC = ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')
 COLUNAS_HISTORICO = ('sop', 'ssop', 'tags', 'cii_aplic', 'cii_aprov', 'ciii_aplic', 'ciii_aprov', 'cv_aplic',
                      'cv_aprov', 'malhas', 'fvm_ciii', 'fvm_cv', 'ccm', 'tap', 'ttas1', 'ttas2', 'tags_sem_fvi')
 
@@ -193,7 +197,8 @@ class Banco:
 
     def data_referencia_atual(self):
         """Data de referência mais recente entre as importações da FIC (texto AAAA-MM-DD) ou None."""
-        r = self.con.execute("SELECT MAX(data_referencia) FROM importacao WHERE tipo <> 'LI'").fetchone()
+        r = self.con.execute(f"SELECT MAX(data_referencia) FROM importacao WHERE tipo IN ({', '.join('?' * len(TIPOS_FIC))})",
+                             TIPOS_FIC).fetchone()
         return r[0] if r else None
 
     # ------------------------------------------------------------------ histórico

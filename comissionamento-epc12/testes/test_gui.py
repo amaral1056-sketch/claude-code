@@ -55,15 +55,12 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
     assert titulo == 'Importação concluída' and '10 registro(s) de FVI' in msg and 'Verificação' in msg
     assert app.selo_ver.cget('text').strip() == '3'           # fora da base, código desconhecido, Campo IV
 
-    # FVI: TAG, SSOP e a situação de cada campo por extenso (sem coluna Situação)
-    t1 = next(r for r in app.fvi['tabela'].linhas if r['tag'] == 'T1')
-    assert (t1['ssop'], t1['txt_cii'], t1['txt_ciii'], t1['txt_cv']) == (
-        f.S1, 'Aprovado', 'Aprovado (ACAMPO5)', 'Pendente (AAPROV)')
-    t = {r['tag']: r for r in app.R.tags}
-    assert (t['T3']['txt_cii'], t['T4']['txt_cv'], t['T5']['txt_cii'], t['T6']['txt_situacao']) == (
-        'Não se aplica', 'Pendente (sem status)', 'Cancelada', 'Sem FVI gerada')
-    assert (t['T9']['txt_situacao'], t['T10']['txt_situacao']) == ('SSOP fora da base', 'Sem SSOP')
+    # FVI: TAG, SSOP e o status de cada campo exatamente como vem da FIC
     assert [c[0] for c in gui.rotulos.COL_TAGS] == ['TAG', 'SSOP', 'FVI Campo II', 'FVI Campo III', 'FVI Campo V']
+    t1 = next(r for r in app.fvi['tabela'].linhas if r['tag'] == 'T1')
+    assert [t1[k] for _, k, _, _ in gui.rotulos.COL_TAGS] == ['T1', f.S1, 'APROVADO', 'ACAMPO5', 'AAPROV']
+    t3 = next(r for r in app.fvi['tabela'].linhas if r['tag'] == 'T3')
+    assert (t3['st_cii'], t3['st_cv']) == ('N/A', 'N/A')
     assert 'situacao' not in app.fvi                          # filtros: unidade, SOP, SSOP e TAG
     # cascata: unidade limita os SOP, SOP limita as SSOP
     app.fvi['unidade'].set(f.UN1)
@@ -88,22 +85,33 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
     escolher(monkeypatch, f.provisorio(tmp_path / 'ccm.xlsx', ['Nº CCM', 'SSOP', 'STATUS'], f.CCM_SINTETICO), '28/10/2026')
     app.importar_fic('CCM')
     assert app.R.total['ccm'] == 1
-    assert [c[0] for c in gui.rotulos.COL_CCM] == ['Unidade', 'SOP', 'SSOP', 'Descrição da SSOP', 'Situação do CCM']
+    assert [c[0] for c in gui.rotulos.COL_CCM] == ['Unidade', 'SOP', 'SSOP', 'Descrição da SSOP', 'Status do CCM']
     d = app.doc_ccm
-    d['situacao'].set('Aprovado')
+    # status da FIC por SSOP: S1 tem CANCELADO + CCMCONCLUIDO (vale o aprovado); S2 AGAPROVA; sem documento = Sem registro
+    assert {r['ssop']: r['txt_ccm_status'] for r in d['tabela'].linhas} == {
+        f.S1: 'CCMCONCLUIDO', f.S2: 'AGAPROVA', f.S3: 'Sem registro', f.S4: 'Sem registro'}
+    assert d['situacao'].cget('values') == [gui.TODAS_SITUACOES, 'AGAPROVA', 'CCMCONCLUIDO', 'Sem registro']
+    d['situacao'].set('CCMCONCLUIDO')
     app._preencher(d)
     assert [r['ssop'] for r in d['tabela'].linhas] == [f.S1]
-    d['situacao'].set('Em andamento')
+    d['situacao'].set('AGAPROVA')
     app._preencher(d)
     assert [r['ssop'] for r in d['tabela'].linhas] == [f.S2]
     app._limpar(d)
     assert len(d['tabela'].linhas) == 4
-    escolher(monkeypatch, f.provisorio(tmp_path / 'fvm.xlsx', ['MALHA', 'SOP', 'SSOP', 'STATUS'], f.FVM_SINTETICO), '28/10/2026')
+    # FVM: M6 aparece em duas SSOP (pode, mas não deve) – entra nas duas e é sinalizada
+    fvm = f.FVM_SINTETICO + [('M6', f.P1, f.S1, 'ACAMPO5'), ('M6', f.P2, f.S2, 'ACAMPO5')]
+    escolher(monkeypatch, f.provisorio(tmp_path / 'fvm.xlsx', ['MALHA', 'SOP', 'SSOP', 'STATUS'], fvm), '28/10/2026')
     app.importar_fic('FVM')
-    malhas = {m['malha']: m for m in app.fvm['tabela'].linhas}
-    assert (malhas['M1']['txt_ciii'], malhas['M2']['txt_cv'], malhas['M3']['txt_ciii'], malhas['M4']['txt_ciii']) == (
-        'Aprovado (ACAMPO5)', 'Aprovado', 'Pendente (AAPRV3E4FIS)', 'Cancelada')
-    assert [c[0] for c in gui.rotulos.COL_MALHAS] == ['Malha', 'SSOP', 'FVM Campo III', 'FVM Campo V']
+    assert [c[0] for c in gui.rotulos.COL_MALHAS] == ['Malha', 'SSOP', 'Status da FVM']
+    malhas = {(m['malha'], m['ssop']): m for m in app.fvm['tabela'].linhas}
+    assert (malhas[('M1', f.S1)]['status'], malhas[('M3', f.S1)]['status'], malhas[('M4', f.S1)]['status']) == (
+        'ACAMPO5', 'AAPRV3E4FIS', 'CANCEL')
+    assert malhas[('M6', f.S1)]['multi_ssop'] and malhas[('M6', f.S2)]['multi_ssop'] and not malhas[('M1', f.S1)]['multi_ssop']
+    assert app._cor_linha(malhas[('M6', f.S2)]) == ('aviso',)
+    assert (next(r for r in app.R.ssop if r['ssop'] == f.S1)['malhas'], next(r for r in app.R.ssop if r['ssop'] == f.S2)['malhas']) == (5, 1)
+    ver = {t: (a, r) for _, t, _, a, r in app.R.verificacao}
+    assert ver['FVM – malhas em mais de uma SSOP (pode, mas não deve)'] == (1, 'VERIFICAR')
     app.fvm['busca'].insert(0, 'M5')
     app._preencher(app.fvm)
     assert [m['malha'] for m in app.fvm['tabela'].linhas] == ['M5']
@@ -112,14 +120,15 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
     app.importar_fic('TTAS')
     assert [c[0] for c in gui.rotulos.COL_TTAS] == ['Unidade', 'SOP', 'Descrição do SOP', 'Situação TTAS 1',
                                                      'Situação TTAS 2']
-    tt = {r['sop']: r for r in app.doc_ttas['tabela'].linhas}
-    assert (tt[f.P1]['txt_ttas1'], tt[f.P1]['txt_ttas2'], tt[f.P2]['txt_ttas2'], tt[f.P3]['txt_ttas1']) == (
-        'Aprovado', 'Aprovado', 'Em andamento', 'Sem registro')
+    tt = {r['sop']: (r['ttas1_status'], r['ttas2_status']) for r in app.doc_ttas['tabela'].linhas}
+    # registro único que avança: em etapa de TTAS 2, a coluna TTAS 1 mostra TTAS1APROVADO
+    assert tt == {f.P1: ('TTAS1APROVADO', 'TTASCONCLUIDO'), f.P2: ('TTAS1APROVADO', '—'),
+                  f.P3: ('Sem registro', 'Sem registro')}
     app.doc_ttas['ssop'].set(f.S3)
     app._preencher(app.doc_ttas)
     assert [r['sop'] for r in app.doc_ttas['tabela'].linhas] == [f.P2]
     app.doc_ttas['ssop'].set(gui.TODAS_SSOP)
-    app.doc_ttas['situacao'].set('TTAS 2 aprovado')
+    app.doc_ttas['situacao'].set('TTASCONCLUIDO')
     app._preencher(app.doc_ttas)
     assert [r['sop'] for r in app.doc_ttas['tabela'].linhas] == [f.P1]
     for nome in gui.PAGINAS:                                  # todas as páginas abrem
@@ -150,27 +159,47 @@ def test_parametro_e_criterio(app, tmp_path, monkeypatch):
     assert next(r for r in app.R.ssop if r['ssop'] == f.S1)['cii_aprov'] == 3
 
 
-def test_visao_gerencial_so_graficos(app, tmp_path, monkeypatch):
+def test_visao_gerencial_pizzas(app, tmp_path, monkeypatch):
     carregar_fvi(app, tmp_path, monkeypatch)
     app.mostrar('Visão Gerencial')
     app.update()
-    assert set(app.g) == {'fvi', 'fvm', 'ccm', 'tap', 'ttas'}
-    assert not hasattr(app, 'ind') and not hasattr(app, 't_visao')
-    g = app.g['fvi']
-    assert g._dicas, 'colunas do gráfico sem dica'
-    dicas = list(g._dicas.values())
-    assert any(t.startswith('U-9001\nFVI Campo II: 66,7%\n4 de 6') for t in dicas)
-    assert any(t.startswith('Total\nFVI Campo II: 66,7%') for t in dicas)          # total no mesmo gráfico
-    item = next(iter(g._dicas))
-    x0, y0, x1, y1 = g.coords(item)
+    assert list(app.pizzas) == ['FVI', 'FVM', 'CCM', 'TAP', 'TTAS']        # ordem pedida
+    alturas = {c.winfo_height() for c in (p.master for p in app.pizzas.values())}
+    assert len(alturas) == 1                                                  # caixas do mesmo tamanho
+    fvi = app.pizzas['FVI']
+    # Status FVI das 10 TAGs: APROVADO 3, ACAMPO3E4 2, demais 1 (vazio = "Sem status")
+    assert [(r, n) for r, n, _, _ in fvi.fatias] == [('APROVADO', 3), ('ACAMPO3E4', 2), ('ACAMPO5', 1),
+                                                     ('ALIBTFUNC', 1), ('CANCELADO', 1), ('Sem status', 1), ('ARECEB', 1)]
+    assert fvi.fatias[0][3] == 'Aprovado'                                     # descrição da lista oficial
+    assert len({c for _, _, c, _ in fvi.fatias}) == len(fvi.fatias)           # uma cor por status
+    cx, cy, r, cortes = fvi._geo
+    import math
+    a = math.radians(cortes[0][0] + 5)
+    assert fvi.fatia_em(cx + r / 2 * math.cos(a), cy + r / 2 * math.sin(a)) == 0
+    assert fvi.fatia_em(cx + r * 2, cy) is None
+    app.seg_fvi.set('Campo II')
+    app._atualizar_visao()
+    assert fvi.fatias[0][:2] == ('APROVADO', 5)
+    app.cb_visao.set(f.UN1)
+    app._atualizar_visao()
+    assert '8 TAGs' in app.sub_pizza['FVI'].cget('text')
+    assert [(r, n) for r, n, _, _ in app.pizzas['CCM'].fatias] == [('Sem registro', 3)]
 
-    class Ev:
-        x, y = int((x0 + x1) / 2), int((y0 + y1) / 2)
-    g._mover(Ev)
-    assert g.find_withtag('dica'), 'dica não apareceu'
 
-
-def test_menu_importar_e_logo(app):
+def test_menus_de_importacao_e_logo(app):
+    m = app.menu_bases()
+    assert [m.entrycget(i, 'label') for i in range(m.index('end') + 1)] == ['LI de SOP / SSOP', 'LI de Itens', 'LI de Malhas']
     m = app.menu_importar()
-    assert [m.entrycget(i, 'label') for i in range(m.index('end') + 1)] == ['SSOP', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
+    assert [m.entrycget(i, 'label') for i in range(m.index('end') + 1)] == ['FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
     assert app.logo.cget('image') is not None and app.logo.cget('text') == ''       # logo embutida, não o quadrado
+
+
+def test_importar_li_de_itens_pela_tela(app, tmp_path, monkeypatch):
+    carregar_fvi(app, tmp_path, monkeypatch)
+    escolher(monkeypatch, f.provisorio(tmp_path / 'itens.xlsx', ['TAG', 'SOP', 'SSOP', 'DESCRIÇÃO'],
+                                       [('T1', f.P1, f.S1, 'X'), ('TX', f.P1, f.S1, 'Y')]))
+    app.importar_base('LI_ITENS')
+    assert app.msgs[-1][1] == 'LI de Itens importada'
+    ver = {t: a for _, t, _, a, _ in app.R.verificacao}
+    assert ver['LI de Itens – registros lidos'] == 2
+    assert app.t_imp.linhas[0]['tipo'] == 'LI_ITENS'

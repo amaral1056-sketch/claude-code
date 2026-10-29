@@ -40,6 +40,53 @@ class Resultado:
         return {v['unidade']: {k: v[c] for k, c in cols.items()} for v in self.visao}
 
 
+def _malhas_em_varias_ssop(regs):
+    """{malha: {ssop, ...}} só das malhas que aparecem com mais de uma SSOP."""
+    m = defaultdict(set)
+    for r in regs:
+        if chave(r['malha']) and chave(r['ssop']):
+            m[chave(r['malha'])].add(chave(r['ssop']))
+    return {k: v for k, v in m.items() if len(v) > 1}
+
+
+def _conferir_bases(R, dados, base_ssop, teste, pend):
+    """Conferências com a LI de Itens e a LI de Malhas (só quando importadas). Não alteram os percentuais."""
+    for tipo, nome, ident, fic, docs in (('LI_ITENS', 'LI de Itens', 'tag', 'FVI', 'cadastro FVI'),
+                                          ('LI_MALHAS', 'LI de Malhas', 'malha', 'FVM', 'FVM')):
+        li = dados.get(tipo) or []
+        if not li:
+            continue
+        teste(nome, f'{nome} – registros lidos', len(li), None)
+        fora = [r for r in li if chave(r['ssop']) and chave(r['ssop']) not in base_ssop]
+        teste(nome, f'{nome} – registros com SSOP fora da base', len(fora))
+        for r in fora:
+            pend.append((nome, r['linha'], r[ident], r['ssop'], 'SSOP fora da base (LI de SOP / SSOP)'))
+        teste(nome, f'{nome} – registros sem SSOP', sum(1 for r in li if not chave(r['ssop'])), None)
+        if tipo == 'LI_MALHAS':
+            multi = _malhas_em_varias_ssop(li)
+            teste(nome, f'{nome} – malhas em mais de uma SSOP (pode, mas não deve)', len(multi))
+            for k, ss in multi.items():
+                pend.append((nome, '', k, ' / '.join(sorted(ss)), f'malha em {len(ss)} SSOP (pode, mas não deve)'))
+        ssop_li = defaultdict(set)
+        for r in li:
+            ssop_li[chave(r[ident])].add(chave(r['ssop']))
+        regs = dados.get(fic) or []
+        if not regs:
+            continue
+        ssop_fic = defaultdict(set)
+        for r in regs:
+            ssop_fic[chave(r[ident])].add(chave(r['ssop']))
+        so_fic = sorted(set(ssop_fic) - set(ssop_li))
+        so_li = sorted(set(ssop_li) - set(ssop_fic))
+        diverge = sorted(k for k in set(ssop_li) & set(ssop_fic) if ssop_li[k] != ssop_fic[k])
+        teste(nome, f'{nome} – {ident.upper()}s do {docs} que não estão na {nome}', len(so_fic), None)
+        teste(nome, f'{nome} – {ident.upper()}s da {nome} que não estão no {docs}', len(so_li), None)
+        teste(nome, f'{nome} – {ident.upper()}s com SSOP diferente entre a {nome} e o {docs}', len(diverge), None)
+        for k in diverge:
+            pend.append((nome, '', k, f'{nome}: {" / ".join(sorted(ssop_li[k]))} · {docs}: {" / ".join(sorted(ssop_fic[k]))}',
+                         f'SSOP diferente entre a {nome} e o {docs}'))
+
+
 def _descricao(dados):
     """Descrição da TAG guardada no JSON da linha do cadastro."""
     if isinstance(dados, str):
@@ -163,6 +210,12 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
             'ok_ciii': (st != '' and st in crit['FVM_CIII']) if valido else None,
             'ok_cv': (st != '' and st in crit['FVM_CV']) if valido else None,
             'situacao': 'CANCELADA' if not valido else ('SEM SSOP' if k == '' else ('FORA DA BASE' if ref is None else 'VÁLIDA'))})
+    # uma malha pode, mas não deve, pertencer a mais de uma SSOP: aceita (conta em cada SSOP) e sinaliza
+    multi_fvm = _malhas_em_varias_ssop(dados.get('FVM', []))
+    for m_ in R.malhas:
+        m_['multi_ssop'] = chave(m_['malha']) in multi_fvm
+    for k_, ss_ in multi_fvm.items():
+        pend.append(('FVM', '', k_, ' / '.join(sorted(ss_)), f'malha em {len(ss_)} SSOP (pode, mas não deve)'))
     for a, st in por_ssop('FVM', dados.get('FVM', []), 'malha', 'FVM', True):
         a['malhas'] += 1
         a['fvm_ciii'] += st != '' and st in crit['FVM_CIII']
@@ -201,10 +254,40 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
             b['ttas2'] += st != '' and st in crit['TTAS2']
     cont['TTAS'] = m
 
+    # ------------------------------------------------------------------ status da FIC exibido por SSOP / SOP
+    def status_exibido(regs, campo, etapa):
+        """Por chave: status do registro aprovado; senão do último válido (ordem do arquivo); senão do cancelado."""
+        melhor = {}
+        for r in regs:
+            k, st = chave(r[campo]), chave(r['status'])
+            if not k:
+                continue
+            prio = 3 if st and st in crit[etapa] else (1 if st and st in canc else 2)
+            cand = (prio, r['linha'])
+            if k not in melhor or cand > melhor[k][0]:
+                melhor[k] = (cand, r['status'].strip())
+        return {k: v[1] for k, v in melhor.items()}
+    st_ccm = status_exibido(dados.get('CCM', []), 'ssop', 'CCM')
+    st_tap = status_exibido(dados.get('TAP', []), 'ssop', 'TAP')
+    st_ttas = status_exibido(dados.get('TTAS', []), 'sop', 'TTAS2')
+    # TTAS é um registro só por SOP que avança (slide 219): status de etapa 2 implica TTAS 1 aprovado
+    etapa2 = (crit['TTAS1'] - {'TTAS1APROVADO'}) | crit['TTAS2']
+
+    def ttas_etapas(st):
+        k = chave(st)
+        if not st:
+            return 'Sem registro', 'Sem registro'
+        if k in canc:
+            return st, st
+        if k in etapa2:
+            return 'TTAS1APROVADO', st
+        return st, '—'
+
     # ------------------------------------------------------------------ linhas por SSOP
     for s in ssops:
         a = acc[chave(s['ssop'])]
         R.ssop.append({
+            'ccm_status': st_ccm.get(chave(s['ssop']), ''), 'tap_status': st_tap.get(chave(s['ssop']), ''),
             'unidade': s['unidade'], 'sop': s['sop'], 'ssop': s['ssop'], 'descricao': s['descricao'], **a,
             'pct_cii': pct(a['cii_aprov'], a['cii_aplic']), 'pct_ciii': pct(a['ciii_aprov'], a['ciii_aplic']),
             'pct_cv': pct(a['cv_aprov'], a['cv_aplic']),
@@ -227,7 +310,10 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
     for s in sops:
         k = chave(s['sop'])
         p, b = por_sop[k], acc_sop[k]
+        st = st_ttas.get(k, '')
+        t1, t2 = ttas_etapas(st)
         R.sop.append({
+            'ttas_status': st, 'ttas1_status': t1, 'ttas2_status': t2,
             'unidade': s['unidade'], 'sop': s['sop'], 'descricao': s['descricao'], **p, **b,
             'pct_cii': pct(p['cii_aprov'], p['cii_aplic']), 'pct_ciii': pct(p['ciii_aprov'], p['ciii_aplic']),
             'pct_cv': pct(p['cv_aprov'], p['cv_aplic']),
@@ -282,6 +368,8 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
         teste(doc, f'{doc} – registros lidos', c[doc]['lidas'], None)
         teste(doc, f'{doc} – registros sem {"SOP" if doc == "TTAS" else "SSOP"}', c[doc]['sem_ssop'], None)
         teste(doc, f'{doc} – registros cancelados (fora das contas)', c[doc]['canceladas'], None)
+    teste('FVM', 'FVM – malhas em mais de uma SSOP (pode, mas não deve)', len(multi_fvm))
+    _conferir_bases(R, dados, acc, teste, pend)
     for doc in ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS'):
         teste('CRITÉRIOS', f'Lista oficial de status {doc} carregada (códigos)', len(cod[doc]), None)
     return R

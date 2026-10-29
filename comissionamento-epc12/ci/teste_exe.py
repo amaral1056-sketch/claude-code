@@ -19,10 +19,10 @@ r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db'), '--li', str(li
                     '--exportar', str(rel)], timeout=300)
 assert r.returncode == 0, f'executável terminou com código {r.returncode}'
 wb = openpyxl.load_workbook(rel)
-assert len(wb['Visão Gerencial']._charts) == 5
+assert len(wb['Visão Gerencial']._charts) == 5        # pizzas FVI, FVM, CCM, TAP e TTAS
 dg = wb['Dados dos gráficos']
-total = [dg.cell(4, c).value for c in (1, 4, 5)]      # 2 unidades fictícias + linha Total
-assert total[0] == 'Total' and total[1] == 7 and abs(total[2] - 4 / 6) < 1e-9, total
+total = [dg.cell(1, 1).value, dg.cell(3, 1).value, dg.cell(3, 2).value]   # status FVI mais frequente das TAGs fictícias
+assert total == ['FVI – Status FVI por TAG', 'APROVADO', 3], total
 # interface: abre a janela em modo de teste (todas as páginas) e confere que ela gravou o sinal de "ok"
 marca = pasta / 'interface_ok.txt'
 r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db')], timeout=300,

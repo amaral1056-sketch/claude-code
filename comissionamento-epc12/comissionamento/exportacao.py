@@ -2,12 +2,14 @@
 import datetime
 
 from openpyxl import Workbook
-from openpyxl.chart import BarChart, Reference
+from openpyxl.chart import PieChart, Reference
+from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.series import DataPoint
 from openpyxl.formatting.rule import ColorScaleRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter as L
 
-from . import rotulos
+from . import rotulos, tema
 from .importacao import CABECALHO_MODELO
 from .rotulos import COL_VISAO, NOTAS_VISAO
 
@@ -21,7 +23,6 @@ AMARELO = PatternFill('solid', fgColor='FFF4D6')
 VERMELHO = PatternFill('solid', fgColor='FBE9E5')
 LINHA = Border(bottom=Side(style='thin', color='E1E5EA'))
 PCT = '0.0%'
-SERIE = ('2A78D6', 'EB6834', '1BAF7A')
 
 
 def _cabecalho(ws, colunas, linha=1, col0=1):
@@ -68,27 +69,29 @@ def _realcar(ws, linhas, coluna, cores, linha0=1, ncols=None):
                 ws.cell(i, j).fill = fill
 
 
-def _grafico(ws, dados, titulo, ref_linhas, colunas_pct, ancora, largura=16):
-    """Colunas agrupadas por unidade (e Total) usando as colunas % da aba 'Dados dos gráficos'."""
-    g = BarChart()
-    g.type, g.grouping, g.title = 'col', 'clustered', titulo
-    g.y_axis.number_format, g.y_axis.scaling.min, g.y_axis.scaling.max = '0%', 0, 1
-    g.y_axis.majorGridlines = None
-    g.height, g.width, g.gapWidth = 8, largura, 80
-    a, b = ref_linhas
-    for i, col in enumerate(colunas_pct):
-        g.add_data(Reference(dados, min_col=col, min_row=a - 1, max_row=b), titles_from_data=True)
-        g.series[-1].graphicalProperties.solidFill = SERIE[i]
-        g.series[-1].graphicalProperties.line.solidFill = SERIE[i]
+def _pizza(ws, dados, titulo, a, b, ancora, cores):
+    """Pizza com rótulos de %, mesmo tamanho para todos os documentos."""
+    g = PieChart()
+    g.title = titulo
+    g.add_data(Reference(dados, min_col=2, min_row=a, max_row=b), titles_from_data=False)
     g.set_categories(Reference(dados, min_col=1, min_row=a, max_row=b))
-    if len(colunas_pct) > 1:
-        g.legend.position = 'b'
-    else:
-        g.legend = None
+    g.height, g.width = 8.5, 15
+    s = g.series[0]
+    for i, cor in enumerate(cores):
+        cor = cor.lstrip('#').upper()
+        pt = DataPoint(idx=i)
+        pt.graphicalProperties.solidFill = cor
+        pt.graphicalProperties.line.solidFill = 'FFFFFF'
+        s.dPt.append(pt)
+    s.dLbls = DataLabelList()
+    s.dLbls.showPercent, s.dLbls.showVal, s.dLbls.showCatName, s.dLbls.showSerName = True, False, False, False
+    s.dLbls.showLeaderLines = False
+    s.dLbls.showLegendKey = False
+    g.legend.position = 'r'
     ws.add_chart(g, ancora)
 
 
-def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(), incluir_sem_fvi=True):
+def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(), incluir_sem_fvi=True, status_fic=()):
     rotulos.preparar(R)
     wb = Workbook()
 
@@ -100,21 +103,33 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
     ws.cell(2, 1, f'Data de referência: {data_referencia or "–"}   ·   Gerado em {datetime.datetime.now():%d/%m/%Y %H:%M}'
                   f'   ·   TAGs sem FVI gerada entram no cálculo do FVI: {"Sim" if incluir_sem_fvi else "Não"}').font = Font(
         name=F, size=10, color='5F6670')
-    # números dos gráficos (unidades + Total) em aba própria
+    # distribuição dos status da FIC (geral) em aba própria; as pizzas leem dela
     dados = wb.create_sheet('Dados dos gráficos')
+    fontes = (('FVI', 'Status FVI por TAG', [t['st_fvi'] for t in R.tags]),
+              ('FVM', 'Status da FVM por malha', [m['status'] for m in R.malhas]),
+              ('CCM', 'Status do CCM por SSOP', [x['txt_ccm_status'] for x in R.ssop]),
+              ('TAP', 'Status do TAP por SSOP', [x['txt_tap_status'] for x in R.ssop]),
+              ('TTAS', 'Status do TTAS por SOP', [x['txt_ttas_status'] for x in R.sop]))
+    lin = 1
+    for k, (doc, titulo, valores) in enumerate(fontes):
+        itens = rotulos.distribuicao(valores) or [('Sem dados importados', 0)]   # as 5 caixas sempre presentes
+        dados.cell(lin, 1, f'{doc} – {titulo}').font = BF
+        _cabecalho(dados, [('Status (FIC)', 's', 22, 0), ('Quantidade', 'n', 12, 0)], linha=lin + 1)
+        for i_, (rot, n) in enumerate(itens, lin + 2):
+            dados.cell(i_, 1, rot).font = NF
+            dados.cell(i_, 2, n).font = NF
+        cores = tema.cores_pizza([r for r, _ in itens], [c for d_, c, _ in status_fic if d_ == doc])
+        _pizza(ws, dados, doc, lin + 2, lin + 1 + len(itens), ('A4', 'J4', 'A22', 'J22', 'A40')[k], cores)
+        lin += len(itens) + 4
+    # avanço por unidade (números do acompanhamento) logo abaixo
+    dados.cell(lin, 1, 'Avanço por unidade').font = BF
     linhas = [dict(v) for v in R.visao] + [{**R.total, 'unidade': 'Total'}]
-    fim = _tabela(dados, COL_VISAO, linhas, filtro=False)
-    for j in range(1, len(COL_VISAO) + 1):
-        dados.cell(fim, j).font, dados.cell(fim, j).fill = BF, TOTAL_FILL
-    for i, t in enumerate(NOTAS_VISAO, fim + 2):
-        dados.cell(i, 1, t).font = Font(name=F, italic=True, size=9, color='5F6670')
-    col = {k: j for j, (_, k, _, _) in enumerate(COL_VISAO, 1)}
-    faixa = (2, fim)
-    _grafico(ws, dados, 'FVI', faixa, [col['pct_cii'], col['pct_ciii'], col['pct_cv']], 'A4', largura=32)
-    _grafico(ws, dados, 'FVM', faixa, [col['pct_fvm_ciii'], col['pct_fvm_cv']], 'A21')
-    _grafico(ws, dados, 'TTAS', faixa, [col['pct_ttas1'], col['pct_ttas2']], 'K21')
-    _grafico(ws, dados, 'CCM', faixa, [col['pct_ccm']], 'A38')
-    _grafico(ws, dados, 'TAP', faixa, [col['pct_tap']], 'K38')
+    fim = _tabela(dados, COL_VISAO, linhas, linha0=lin + 1, filtro=False)
+    for j_ in range(1, len(COL_VISAO) + 1):
+        dados.cell(fim, j_).font, dados.cell(fim, j_).fill = BF, TOTAL_FILL
+    for i_, t in enumerate(NOTAS_VISAO, fim + 2):
+        dados.cell(i_, 1, t).font = Font(name=F, italic=True, size=9, color='5F6670')
+    dados.freeze_panes = None
 
     # ---------------------------------------------------------------- FVI e FVM (item a item)
     cores = {'Sem FVI gerada': AMARELO, 'Sem SSOP': VERMELHO, 'SSOP fora da base': VERMELHO}

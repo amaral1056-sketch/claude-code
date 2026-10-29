@@ -54,8 +54,16 @@ def importar_status(banco, arquivo, tipo=None):
     return tipo, len(lista)
 
 
+def importar_base(banco, tipo, arquivo):
+    """LI de Itens / LI de Malhas: substitui a base anterior do tipo (sem data de referência nem histórico)."""
+    regs, _, info = importacao.ler_provisorio(tipo, arquivo)
+    obs = f'{len(info["linhas_ignoradas"])} linha(s) ignorada(s) (cabeçalho repetido ou rodapé)' if info['linhas_ignoradas'] else ''
+    banco.substituir_dados(tipo, regs, arquivo, None, obs)
+    return f'{importacao.NOMES_BASE[tipo]} importada: {len(regs)} registro(s).'
+
+
 def calcular(banco):
-    dados = {t: banco.dados(t) for t in TIPOS_FIC}
+    dados = {t: banco.dados(t) for t in TIPOS_FIC + ('LI_ITENS', 'LI_MALHAS')}
     return calculo.calcular(banco.base(), banco.criterios(), banco.status_fic(), banco.incluir_sem_fvi, dados)
 
 

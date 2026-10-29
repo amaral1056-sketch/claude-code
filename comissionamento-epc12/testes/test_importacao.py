@@ -4,7 +4,7 @@ import datetime
 import openpyxl
 import pytest
 
-from comissionamento import exportacao, importacao, servico
+from comissionamento import exportacao, importacao, servico, tema
 from comissionamento.banco import Banco
 from comissionamento.importacao import ErroImportacao
 from testes import fabrica as f
@@ -105,28 +105,62 @@ def test_relatorio_excel_e_backup(banco, tmp_path):
     servico.importar_fic(banco, 'FVI', f.cadastro(tmp_path / 'c.xlsx', f.TAGS_SINTETICAS))
     R = servico.calcular(banco)
     destino = tmp_path / 'rel.xlsx'
-    exportacao.exportar_relatorio(R, destino, '28/10/2026', servico.historico_com_percentuais(banco), banco.criterios())
+    exportacao.exportar_relatorio(R, destino, '28/10/2026', servico.historico_com_percentuais(banco), banco.criterios(),
+                                  True, banco.status_fic())
     wb = openpyxl.load_workbook(destino)
     assert wb.sheetnames == ['Visão Gerencial', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS', 'Verificação', 'Pendências',
                              'Histórico', 'Critérios', 'Dados dos gráficos']
     vg = wb['Visão Gerencial']
-    assert len(vg._charts) == 5                                  # FVI, FVM, TTAS, CCM e TAP
+    assert len(vg._charts) == 5                                  # pizzas FVI, FVM, CCM, TAP e TTAS
+    assert all(type(g).__name__ == 'PieChart' for g in vg._charts)
+    # mesma cor da tela para o mesmo status (APROVADO é a fatia maior do FVI)
+    ordem_fvi = [c for d, c, _ in banco.status_fic() if d == 'FVI']
+    cor_tela = tema.cores_pizza(['APROVADO'], ordem_fvi)[0].lstrip('#').upper()
+    assert vg._charts[0].series[0].dPt[0].graphicalProperties.solidFill.srgbClr == cor_tela
     assert vg.max_row <= 2                                       # só título e gráficos
     dg = wb['Dados dos gráficos']
-    assert [dg.cell(1, j).value for j in (1, 5, 9, 15)] == ['Unidade', 'FVI Campo II (%)', 'FVM Campo III (%)',
-                                                           'SOP com TTAS 1 aprovado']
-    assert [dg.cell(r, 1).value for r in (2, 3, 4)] == [f.UN1, f.UN2, 'Total']
-    assert dg.cell(4, 5).value == pytest.approx(4 / 6)
+    assert [dg.cell(1, 1).value, dg.cell(2, 1).value, dg.cell(3, 1).value, dg.cell(3, 2).value] == [
+        'FVI – Status FVI por TAG', 'Status (FIC)', 'APROVADO', 3]
+    blocos = [c.value for c in dg['A'] if isinstance(c.value, str) and c.value.split(' – ')[0] in
+              ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')]
+    assert blocos == ['FVI – Status FVI por TAG', 'FVM – Status da FVM por malha', 'CCM – Status do CCM por SSOP',
+                      'TAP – Status do TAP por SSOP', 'TTAS – Status do TTAS por SOP']
     fvi = list(wb['FVI'].iter_rows(values_only=True))
-    assert fvi[0] == ('Unidade', 'SOP', 'SSOP', 'TAG', 'Descrição da TAG', 'Nº da FVI', 'FVI Campo II', 'FVI Campo III',
-                      'FVI Campo V')
+    assert fvi[0] == ('Unidade', 'SOP', 'SSOP', 'TAG', 'Descrição da TAG', 'Nº da FVI', 'Status FVI', 'FVI Campo II',
+                      'FVI Campo III', 'FVI Campo V')
     assert len(fvi) == 11
     t1 = next(r for r in fvi if r[3] == 'T1')
-    assert t1[6:] == ('Aprovado', 'Aprovado (ACAMPO5)', 'Pendente (AAPROV)')
-    assert [c.value for c in wb['CCM'][1]] == ['Unidade', 'SOP', 'SSOP', 'Descrição da SSOP', 'Situação do CCM']
+    assert t1[6:] == ('ACAMPO5', 'APROVADO', 'ACAMPO5', 'AAPROV')
+    assert [c.value for c in wb['CCM'][1]] == ['Unidade', 'SOP', 'SSOP', 'Descrição da SSOP', 'Status do CCM']
     assert [c.value for c in wb['TTAS'][1]] == ['Unidade', 'SOP', 'Descrição do SOP', 'Situação TTAS 1', 'Situação TTAS 2']
     copia = tmp_path / 'copia.db'
     banco.copiar_para(copia)
     b2 = Banco(copia)
     assert len(b2.dados('FVI')) == 10
     b2.fechar()
+
+
+def test_li_de_itens_e_malhas_conferidas_com_a_fic(banco, tmp_path):
+    servico.importar_fic(banco, 'FVI', f.cadastro(tmp_path / 'c.xlsx', f.TAGS_SINTETICAS))
+    servico.importar_fic(banco, 'FVM', f.provisorio(tmp_path / 'fvm.xlsx', ['MALHA', 'SOP', 'SSOP', 'STATUS'],
+                                                    f.FVM_SINTETICO), '28/10/2026')
+    itens = f.provisorio(tmp_path / 'itens.xlsx', ['TAG', 'SOP', 'SSOP', 'DESCRIÇÃO'],
+                         [('T1', f.P1, f.S1, 'A'), ('T2', f.P2, f.S2, 'B'), ('TX', f.P1, f.S1, 'C'),
+                          ('TY', '', '', 'não alocado'), ('Emissão: ', '', '', '')])
+    assert servico.importar_base(banco, 'LI_ITENS', itens) == 'LI de Itens importada: 4 registro(s).'
+    malhas = f.provisorio(tmp_path / 'malhas.xlsx', ['MALHA', 'SOP', 'SSOP', 'DESCRIÇÃO'],
+                          [('M1', f.P1, f.S1, ''), ('M1', f.P2, f.S2, ''), ('M2', f.P1, f.S1, ''), ('MZ', 'X', 'SSOP-ZZ', '')])
+    servico.importar_base(banco, 'LI_MALHAS', malhas)
+    R = servico.calcular(banco)
+    v = {t: (a, r) for _, t, _, a, r in R.verificacao}
+    assert v['LI de Itens – registros lidos'] == (4, 'INFO')
+    assert v['LI de Itens – registros sem SSOP'] == (1, 'INFO')
+    assert v['LI de Itens – TAGs do cadastro FVI que não estão na LI de Itens'] == (8, 'INFO')   # T3..T10
+    assert v['LI de Itens – TAGs da LI de Itens que não estão no cadastro FVI'] == (2, 'INFO')   # TX, TY
+    assert v['LI de Itens – TAGs com SSOP diferente entre a LI de Itens e o cadastro FVI'] == (1, 'INFO')  # T2 (S2 x S1)
+    assert v['LI de Malhas – malhas em mais de uma SSOP (pode, mas não deve)'] == (1, 'VERIFICAR')
+    assert v['LI de Malhas – registros com SSOP fora da base'] == (1, 'VERIFICAR')
+    assert v['LI de Malhas – MALHAs com SSOP diferente entre a LI de Malhas e o FVM'] == (1, 'INFO')     # M1
+    # as bases não entram na data de referência nem no histórico, e não mudam o avanço
+    assert banco.data_referencia_atual() == '2026-10-28'
+    assert R.total['pct_cii'] == pytest.approx(4 / 6)

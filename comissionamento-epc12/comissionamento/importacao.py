@@ -161,9 +161,17 @@ COLUNAS_PROVISORIAS = {
              ('sop', True, ('SOP',)),
              ('status', True, ('STATUS', 'STATUS TTAS', 'STATUS DO TTAS', 'SITUACAO'))],
 }
+# bases complementares (layout provisório até chegarem os arquivos reais): item/malha -> SSOP
+_DESCR = ('DESCRICAO', 'DESCRICAO DO TAG', 'DESCRICAO DO ITEM', 'DESCRICAO DA MALHA')
+COLUNAS_PROVISORIAS['LI_ITENS'] = [('tag', True, ('TAG', 'Nº TAG', 'TAG DO ITEM', 'ITEM')), ('sop', False, ('SOP',)),
+                                   ('ssop', True, ('SSOP',)), ('descricao', False, _DESCR)]
+COLUNAS_PROVISORIAS['LI_MALHAS'] = [('malha', True, ('MALHA', 'Nº MALHA', 'TAG MALHA', 'TAG DA MALHA')),
+                                    ('sop', False, ('SOP',)), ('ssop', True, ('SSOP',)), ('descricao', False, _DESCR)]
+NOMES_BASE = {'LI': 'LI de SOP / SSOP', 'LI_ITENS': 'LI de Itens', 'LI_MALHAS': 'LI de Malhas'}
 # nomes do cabeçalho das planilhas-modelo geradas pelo programa
 CABECALHO_MODELO = {'FVM': ['MALHA', 'SOP', 'SSOP', 'STATUS'], 'CCM': ['Nº CCM', 'SSOP', 'STATUS'],
-                    'TAP': ['Nº TAP', 'SSOP', 'STATUS'], 'TTAS': ['Nº TTAS', 'SOP', 'STATUS']}
+                    'TAP': ['Nº TAP', 'SSOP', 'STATUS'], 'TTAS': ['Nº TTAS', 'SOP', 'STATUS'],
+                    'LI_ITENS': ['TAG', 'SOP', 'SSOP', 'DESCRIÇÃO'], 'LI_MALHAS': ['MALHA', 'SOP', 'SSOP', 'DESCRIÇÃO']}
 
 
 def _localizar_cabecalho(linhas, spec):
@@ -210,7 +218,11 @@ def ler_provisorio(tipo, arquivo):
             ignoradas.append(n)  # cabeçalho repetido
             nao_dados.append(r)
             continue
-        if chave(val[chave_doc]) == '' and chave(val['status']) == '':
+        if 'status' not in val:   # bases (LI de Itens/Malhas): item sem SSOP é válido (não alocado); só o rodapé sai
+            vazia = all(chave(v) == '' for c, v in val.items() if c != ident)
+        else:
+            vazia = chave(val[chave_doc]) == '' and chave(val['status']) == ''
+        if vazia:
             ignoradas.append(n)  # rodapé/linha sem SSOP/SOP e sem status
             nao_dados.append(r)
             continue
