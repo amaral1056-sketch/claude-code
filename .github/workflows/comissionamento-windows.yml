@@ -1,0 +1,49 @@
+name: "Comissionamento EPC12 – executável Windows"
+
+on:
+  push:
+    paths:
+      - "comissionamento-epc12/**"
+      - ".github/workflows/comissionamento-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: comissionamento-epc12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run tests (includes GUI flows with Tk)
+        run: python -m pytest testes -q -rs
+
+      - name: Build executable
+        run: python -m PyInstaller --noconfirm --clean ComissionamentoEPC12.spec
+
+      - name: Test executable
+        run: python ci/teste_exe.py dist/ComissionamentoEPC12.exe "${{ runner.temp }}/teste_exe"
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ComissionamentoEPC12-windows
+          path: |
+            comissionamento-epc12/dist/ComissionamentoEPC12.exe
+            comissionamento-epc12/README.md
+          if-no-files-found: error

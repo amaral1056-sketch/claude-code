@@ -1,0 +1,85 @@
+"""Gera planilhas fictícias (mesmo layout das fontes reais) para os testes. Nenhum dado real."""
+import openpyxl
+
+from comissionamento.importacao import CADASTRO_ESPERADO, N_COLS_CADASTRO
+
+UN1, UN2 = 'U-9001', 'U-9002'
+P1, P2, P3 = 'SOP-U-9001-UT-1001', 'SOP-U-9001-AX-2001', 'SOP-U-9002-EL-7001'
+S1, S2, S3, S4 = P1.replace('SOP', 'SSOP') + '-0001', P2.replace('SOP', 'SSOP') + '-0001', \
+    P2.replace('SOP', 'SSOP') + '-0002', P3.replace('SOP', 'SSOP') + '-0001'
+CT = '0000.0000000.00.0'
+
+
+def li(caminho, linhas=None):
+    linhas = linhas or [(UN1, P1, 'UTILIDADE 1', S1, 'SUB 1'), (UN1, P2, 'AUX 2', S2, 'SUB 2A'),
+                        (UN1, P2, 'AUX 2', S3, 'SUB 2B'), (UN2, P3, 'ELÉTRICA 3', S4, 'SUB 3')]
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'LISTA'
+    ws.append(['LISTA DE INTERFACES – TESTE'])
+    ws.append([])
+    ws.append(['ITEM', 'UNIDADE', 'SOP', 'DESCRIÇÃO SOP', 'SSOP', 'DESCRIÇÃO SSOP', 'DOCUMENTOS DE REFERÊNCIA'])
+    for i, (u, sop, dsop, ssop, dssop) in enumerate(linhas, 1):
+        ws.append([i, u, sop, dsop, ssop, dssop, 'DE-0000.00-0000-000-XXX-001   DE-0000.00-0000-000-XXX-002'])
+    wb.save(caminho)
+    return caminho
+
+
+def cadastro(caminho, tags, emissao='28/10/2026'):
+    """tags: (TAG, SSOP, Nº FVI, STATUS FVI, CII, CIII, CIV, CV[, CLASSE]) – layout do Relatório de Cadastro Geral."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.cell(1, 2, 'Relatório de Cadastro Geral')
+    for col in range(1, N_COLS_CADASTRO + 1):
+        ws.cell(5, col, CADASTRO_ESPERADO.get(col, f'COLUNA {col}'))
+    r = 6
+    for t in tags:
+        tag, ss, nfvi, aj, ak, al, am, an = t[:8]
+        ws.cell(r, 1, tag)
+        ws.cell(r, 5, ss)
+        ws.cell(r, 6, t[8] if len(t) > 8 else '(032) TRANSFORMADOR')
+        ws.cell(r, 29, 'CONTRATO' if tag == 'TAG' else CT)
+        ws.cell(r, 31, nfvi)
+        for col, v in zip(range(36, 41), (aj, ak, al, am, an)):
+            ws.cell(r, col, v)
+        r += 1
+    ws.cell(r + 1, 1, 'Emissão: ')
+    ws.cell(r + 1, 2, 'Classificação da Informação: TESTE')
+    if emissao:
+        ws.cell(r + 2, 1, f'{emissao}\n\t\t\t17:12:50 PM')
+    wb.save(caminho)
+    return caminho
+
+
+def provisorio(caminho, cabecalho, linhas, titulo=None):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    if titulo:
+        ws.append([titulo])
+        ws.append([])
+    ws.append(cabecalho)
+    for r in linhas:
+        ws.append(list(r))
+    wb.save(caminho)
+    return caminho
+
+
+# casos de borda do teste_sintetico.py original (respostas calculadas à mão)
+TAGS_SINTETICAS = [
+    ('TAG', 'SSOP', 'Nº FVI', 'STATUS FVI', 'STATUS CAMPO II', 'STATUS CAMPO III', 'STATUS CAMPO IV', 'STATUS CAMPO V'),  # cabeçalho repetido
+    ('T1', S1, '1', 'ACAMPO5', 'APROVADO', 'ACAMPO5', 'ACAMPO3E4', 'AAPROV'),       # Campo IV ativo -> teste avisa
+    ('T2', S1, '2', 'APROVADO', 'APROVADO', 'APROVADO', 'N/A', 'APROVADO'),
+    ('T3', S1, '3', 'ALIBTFUNC', 'N/A', 'ALIBTFUNC', 'N/A', 'N/A'),
+    ('T4', S1, '4', 'ACAMPO3E4', 'AAPROV', 'ACAMPO3E4', 'N/A', ''),                 # CV vazio: aplicável, não aprovado
+    ('T5', S1, '5', 'CANCELADO', 'CANCELADO', 'CANCELADO', 'N/A', 'CANCELADO'),     # cancelada: fora de tudo
+    ('T6', S1, '', '', '', '', '', ''),                                             # sem FVI gerada
+    ('T7', ' ' + S2 + ' ', '7', 'ACAMPO3E4', 'APROVADO', ' ALIBTFUNC ', 'N/A', 'XPTO'),  # espaços + código desconhecido
+    ('T8', S3, '8', 'APROVADO', 'APROVADO', 'APROVADO', 'N/A', 'APROVADO'),
+    ('T9', 'SSOP-NAO-EXISTE', '9', 'APROVADO', 'APROVADO', 'APROVADO', 'N/A', 'APROVADO'),  # fora da base
+    ('T10', '', '10', 'ARECEB', 'ARECEB', 'ARECEB', 'N/A', 'ARECEB'),                       # sem SSOP (não alocada)
+]
+FVM_SINTETICO = [('M1', P1, S1, 'ACAMPO5'), ('M2', P1, S1, 'APROVADO'), ('M3', P1, S1, 'AAPRV3E4FIS'),
+                 ('M4', P1, S1, 'CANCEL'), ('M5', P1, S1, 'LIBTFUNC')]
+CCM_SINTETICO = [('C1', S1, 'CANCELADO'), ('C1R1', S1, 'CCMCONCLUIDO'), ('C2', S2, 'AGAPROVA')]
+TAP_SINTETICO = [('TAP1', S1, 'TAP CONCLUIDO'), ('TAP2', S2, 'TAP1APROVCQ'), ('TAP3', S2, 'XYZ')]
+TTAS_SINTETICO = [('TT1', P1, 'TTASCONCLUIDO'), ('TT2', P2, 'TTAS1APROVADO')]
