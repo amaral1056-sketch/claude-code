@@ -1,5 +1,5 @@
 """Ícones de linha padronizados (mesmo traço, cantos arredondados), desenhados com Pillow em 4x e reduzidos
-(bordas suaves). Também o anel de progresso dos indicadores e a logo (arquivo logo.png ao lado do programa)."""
+(bordas suaves), e a logo do programa (embutida em recursos/; um logo.png ao lado do programa a substitui)."""
 from functools import lru_cache
 from pathlib import Path
 
@@ -153,38 +153,18 @@ def icone(nome, cor, tamanho=18):
     return ctk.CTkImage(light_image=_pil(nome, cor, tamanho), size=(tamanho, tamanho))
 
 
-def anel(fracao, cor, trilha='#E8EDF5', tamanho=76, espessura=8):
-    """Anel de progresso suave (0..1 ou None)."""
-    s = tamanho * ESCALA
-    img = Image.new('RGBA', (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    w = espessura * ESCALA
-    caixa = (w / 2, w / 2, s - w / 2, s - w / 2)
-    d.ellipse(caixa, outline=_cor(trilha), width=w)
-    if fracao:
-        fim = -90 + 360 * min(1.0, fracao)
-        d.arc(caixa, -90, fim, fill=_cor(cor), width=w)
-        r = w / 2
-        import math
-        for ang in (-90, fim):  # pontas arredondadas
-            a = math.radians(ang)
-            # o contorno do PIL é desenhado para dentro da caixa: o centro do traço fica em s/2 - w
-            cx = s / 2 + (s / 2 - w) * math.cos(a)
-            cy = s / 2 + (s / 2 - w) * math.sin(a)
-            d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=_cor(cor))
-    img = img.resize((tamanho, tamanho), Image.LANCZOS)
-    return ctk.CTkImage(light_image=img, size=(tamanho, tamanho))
+def recurso(nome):
+    """Arquivo embutido no programa (comissionamento/recursos), inclusive dentro do .exe."""
+    return Path(__file__).resolve().parent / 'recursos' / nome
 
 
-def logo(pastas, tamanho=44):
-    """CTkImage do primeiro logo.png encontrado nas pastas, ou None (mostra o quadrado reservado)."""
-    for pasta in pastas:
-        arq = Path(pasta) / 'logo.png'
+def logo(pastas, altura=64):
+    """CTkImage da logo: logo.png ao lado do programa (substitui) ou a logo embutida. None se não houver."""
+    for arq in [Path(p) / 'logo.png' for p in pastas] + [recurso('logo.png')]:
         if arq.exists():
             try:
                 img = Image.open(arq).convert('RGBA')
-                img.thumbnail((tamanho * ESCALA, tamanho * ESCALA), Image.LANCZOS)
-                return ctk.CTkImage(light_image=img, size=(round(img.width / ESCALA), round(img.height / ESCALA)))
             except OSError:
-                return None
+                continue
+            return ctk.CTkImage(light_image=img, size=(round(img.width * altura / img.height), altura))
     return None

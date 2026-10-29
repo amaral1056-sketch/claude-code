@@ -23,12 +23,15 @@ comissionamento/importacao.py leitura da LI, do Relatório de Cadastro Geral e d
 comissionamento/calculo.py   reprodução das fórmulas da planilha (IMP_* auxiliares, abas por SSOP/SOP, visão, verificação)
 comissionamento/servico.py   importar -> gravar -> recalcular -> histórico
 comissionamento/exportacao.py relatório Excel (valores formatados) e planilhas-modelo
-comissionamento/gui.py       interface CustomTkinter: barra lateral, Visão Gerencial (indicadores + gráficos + tabela),
-                             FVI TAG a TAG, FVM malha a malha, CCM/TAP/TTAS, Verificação, Histórico, Importações, Critérios
+comissionamento/gui.py       interface CustomTkinter: barra lateral com logo, Visão Gerencial (só os 5 gráficos: FVI, FVM,
+                             TTAS, CCM, TAP – por unidade + Total), FVI TAG a TAG, FVM malha a malha, CCM/TAP/TTAS,
+                             Verificação, Histórico, Importações, Critérios. Filtros: Unidade → SOP → SSOP em cascata,
+                             + TAG/malha (FVI/FVM) ou situação (CCM/TAP/TTAS)
+comissionamento/recursos/    logo.png (Consórcio HC4), icone.ico/icone.png – embutidos no .exe pelo .spec
 comissionamento/rotulos.py   TODOS os textos e colunas exibidos (tela e Excel), por extenso – sem abreviações
 comissionamento/tema.py      paleta suave, fontes e estilo das tabelas; cores de série validadas p/ daltonismo (3 cores)
-comissionamento/icones.py    ícones de linha padronizados (Pillow, 4x e reduzidos), anel de progresso e logo.png
-comissionamento/graficos.py  gráficos em tk.Canvas (colunas agrupadas, barras de avanço, linhas) com dica ao passar o mouse
+comissionamento/icones.py    ícones de linha padronizados (Pillow, 4x e reduzidos), recurso() e logo()
+comissionamento/graficos.py  gráficos em tk.Canvas (colunas agrupadas, linhas) com dica ao passar o mouse
 testes/                      sintético (12 casos de borda à mão), importação, interface, dados reais (pulado sem dados/)
 ci/teste_exe.py              testa o .exe gerado; .github/workflows/comissionamento-windows.yml gera o .exe no Windows
 ```
@@ -50,7 +53,10 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 - Textos ao usuário sempre por extenso ("FVI Campo II", "FVM Campo III", "TTAS 1"), definidos em rotulos.py e
   usados igualmente na tela e no Excel. Ícones só do conjunto de icones.py (mesmo traço).
 - ci/teste_exe.py abre o .exe por linha de comando E a interface (variável EPC12_TESTE_INICIO); não remover.
-- Gráficos: no máximo 3 séries por gráfico (paleta validada só até 3 cores em todos os pares); legenda sempre visível.
+- Gráficos: no máximo 3 séries por gráfico (paleta validada só até 3 cores em todos os pares); legenda com 2+ séries
+  (com uma só, o título identifica).
+- Layout das telas definido pelo usuário (29/10): Visão Gerencial só com gráficos; FVI/FVM sem coluna Situação;
+  CCM/TAP só com a situação; TTAS com "Situação TTAS 1/2"; menu Importar = SSOP, FVI, FVM, CCM, TAP, TTAS.
 - Banco: cada importação substitui a anterior do tipo; o histórico guarda contagens por unidade por data de referência.
 
 ## Pendências (perguntas abertas ao usuário)

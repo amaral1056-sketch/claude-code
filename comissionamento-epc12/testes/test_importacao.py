@@ -108,23 +108,23 @@ def test_relatorio_excel_e_backup(banco, tmp_path):
     exportacao.exportar_relatorio(R, destino, '28/10/2026', servico.historico_com_percentuais(banco), banco.criterios())
     wb = openpyxl.load_workbook(destino)
     assert wb.sheetnames == ['Visão Gerencial', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS', 'Verificação', 'Pendências',
-                             'Histórico', 'Critérios']
+                             'Histórico', 'Critérios', 'Dados dos gráficos']
     vg = wb['Visão Gerencial']
-    # indicadores gerais com nomes por extenso
-    assert [vg.cell(5, j).value for j in range(1, 10)] == ['FVI Campo II', 'FVI Campo III', 'FVI Campo V', 'FVM Campo III',
-                                                          'FVM Campo V', 'CCM', 'TAP', 'TTAS 1', 'TTAS 2']
-    assert vg.cell(6, 1).value == pytest.approx(4 / 6)
-    assert [vg.cell(9, j).value for j in (1, 5, 9, 15)] == ['Unidade', 'FVI Campo II (%)', 'FVM Campo III (%)',
+    assert len(vg._charts) == 5                                  # FVI, FVM, TTAS, CCM e TAP
+    assert vg.max_row <= 2                                       # só título e gráficos
+    dg = wb['Dados dos gráficos']
+    assert [dg.cell(1, j).value for j in (1, 5, 9, 15)] == ['Unidade', 'FVI Campo II (%)', 'FVM Campo III (%)',
                                                            'SOP com TTAS 1 aprovado']
-    assert [vg.cell(r, 1).value for r in (10, 11, 12)] == [f.UN1, f.UN2, 'TOTAL']
-    assert vg.cell(12, 5).value == pytest.approx(4 / 6)
-    assert len(vg._charts) == 4                                  # FVI, FVM, CCM e TAP, TTAS por unidade
+    assert [dg.cell(r, 1).value for r in (2, 3, 4)] == [f.UN1, f.UN2, 'Total']
+    assert dg.cell(4, 5).value == pytest.approx(4 / 6)
     fvi = list(wb['FVI'].iter_rows(values_only=True))
     assert fvi[0] == ('Unidade', 'SOP', 'SSOP', 'TAG', 'Descrição da TAG', 'Nº da FVI', 'FVI Campo II', 'FVI Campo III',
-                      'FVI Campo V', 'Situação')
+                      'FVI Campo V')
     assert len(fvi) == 11
     t1 = next(r for r in fvi if r[3] == 'T1')
-    assert t1[6:] == ('Aprovado', 'Aprovado (ACAMPO5)', 'Pendente (AAPROV)', 'Válida')
+    assert t1[6:] == ('Aprovado', 'Aprovado (ACAMPO5)', 'Pendente (AAPROV)')
+    assert [c.value for c in wb['CCM'][1]] == ['Unidade', 'SOP', 'SSOP', 'Descrição da SSOP', 'Situação do CCM']
+    assert [c.value for c in wb['TTAS'][1]] == ['Unidade', 'SOP', 'Descrição do SOP', 'Situação TTAS 1', 'Situação TTAS 2']
     copia = tmp_path / 'copia.db'
     banco.copiar_para(copia)
     b2 = Banco(copia)

@@ -16,24 +16,23 @@ COL_VISAO = [('Unidade', 'unidade', 11, 0), ('SOP', 'sop', 6, 0), ('SSOP', 'ssop
              ('SOP com TTAS 2 aprovado', 'ttas2', 21, 0), ('TTAS 2 (%)', 'pct_ttas2', 10, 1),
              ('TAGs sem FVI gerada', 'tags_sem_fvi', 17, 0)]
 COL_TAGS = [('TAG', 'tag', 18, 0), ('SSOP', 'ssop', 27, 0),
-            ('FVI Campo II', 'txt_cii', 24, 0), ('FVI Campo III', 'txt_ciii', 24, 0), ('FVI Campo V', 'txt_cv', 24, 0),
-            ('Situação', 'txt_situacao', 18, 0)]
+            ('FVI Campo II', 'txt_cii', 24, 0), ('FVI Campo III', 'txt_ciii', 24, 0), ('FVI Campo V', 'txt_cv', 24, 0)]
 COL_TAGS_XLS = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 28, 0), ('TAG', 'tag', 20, 0),
                 ('Descrição da TAG', 'descricao', 36, 0), ('Nº da FVI', 'n_fvi', 10, 0), ('FVI Campo II', 'txt_cii', 24, 0),
-                ('FVI Campo III', 'txt_ciii', 24, 0), ('FVI Campo V', 'txt_cv', 24, 0), ('Situação', 'txt_situacao', 18, 0)]
+                ('FVI Campo III', 'txt_ciii', 24, 0), ('FVI Campo V', 'txt_cv', 24, 0)]
 COL_MALHAS = [('Malha', 'malha', 22, 0), ('SSOP', 'ssop', 27, 0), ('FVM Campo III', 'txt_ciii', 24, 0),
-              ('FVM Campo V', 'txt_cv', 24, 0), ('Situação', 'txt_situacao', 16, 0)]
+              ('FVM Campo V', 'txt_cv', 24, 0)]
 COL_MALHAS_XLS = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 28, 0), ('Malha', 'malha', 22, 0),
-                  ('FVM Campo III', 'txt_ciii', 26, 0), ('FVM Campo V', 'txt_cv', 26, 0), ('Situação', 'txt_situacao', 18, 0)]
+                  ('FVM Campo III', 'txt_ciii', 26, 0), ('FVM Campo V', 'txt_cv', 26, 0)]
 _SSOP = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 27, 0), ('Descrição da SSOP', 'descricao', 34, 0)]
-COL_CCM = _SSOP + [('CCM registrados', 'ccm_reg', 14, 0), ('CCM aprovado', 'txt_ccm_aprovado', 13, 2),
-                   ('Situação do CCM', 'txt_ccm_situacao', 16, 0)]
-COL_TAP = _SSOP + [('TAP registrados', 'tap_reg', 14, 0), ('TAP concluído', 'txt_tap_concluido', 13, 2),
-                   ('Situação do TAP', 'txt_tap_situacao', 16, 0)]
-COL_TTAS = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('Descrição do SOP', 'descricao', 40, 0),
-            ('Quantidade de SSOP', 'qtd_ssop', 16, 0), ('TTAS registrados', 'ttas_reg', 15, 0),
-            ('TTAS 1 aprovado', 'txt_ttas1', 14, 2), ('TTAS 2 aprovado', 'txt_ttas2', 14, 2),
-            ('Situação do TTAS', 'txt_ttas_situacao', 17, 0)]
+COL_CCM = _SSOP + [('Situação do CCM', 'txt_ccm_situacao', 16, 2)]
+COL_TAP = _SSOP + [('Situação do TAP', 'txt_tap_situacao', 16, 2)]
+COL_TTAS = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('Descrição do SOP', 'descricao', 46, 0),
+            ('Situação TTAS 1', 'txt_ttas1', 16, 2), ('Situação TTAS 2', 'txt_ttas2', 16, 2)]
+# valores possíveis das colunas de situação (filtros)
+SITUACOES_CCM = ('Aprovado', 'Em andamento', 'Sem registro')
+SITUACOES_TAP = ('Concluído', 'Em andamento', 'Sem registro')
+SITUACOES_TTAS = ('TTAS 1 aprovado', 'TTAS 2 aprovado', 'Em andamento', 'Sem registro')
 COL_HIST = [('Data de referência', 'data', 15, 0), ('Unidade', 'unidade', 11, 0), ('TAGs (FVI)', 'tags', 9, 0),
             ('FVI Campo II (%)', 'pct_cii', 14, 1), ('FVI Campo III (%)', 'pct_ciii', 15, 1), ('FVI Campo V (%)', 'pct_cv', 14, 1),
             ('Malhas (FVM)', 'malhas', 11, 0), ('FVM Campo III (%)', 'pct_fvm_ciii', 16, 1),
@@ -93,7 +92,8 @@ def preparar(R):
         s['txt_tap_concluido'] = sim_nao(s['tap_concluido'])
         s['txt_tap_situacao'] = SITUACAO_DOC[s['tap_situacao']]
     for s in R.sop:
-        s['txt_ttas1'] = sim_nao(s['ttas1_aprovado'])
-        s['txt_ttas2'] = sim_nao(s['ttas2_aprovado'])
+        andamento = 'Em andamento' if s['ttas_reg'] else 'Sem registro'
+        s['txt_ttas1'] = 'Aprovado' if s['ttas1_aprovado'] else andamento
+        s['txt_ttas2'] = 'Aprovado' if s['ttas2_aprovado'] else andamento
         s['txt_ttas_situacao'] = SITUACAO_DOC[s['ttas_situacao']]
     return R

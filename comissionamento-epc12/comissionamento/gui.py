@@ -12,7 +12,7 @@ from tkinter import font as tkfont
 from . import __version__, configuracao, exportacao, rotulos, servico, tema
 from .banco import Banco
 from .graficos import Grafico, pct_txt
-from .icones import anel, icone, logo
+from .icones import icone, logo, recurso
 from .importacao import ErroImportacao
 from .padroes import ETAPAS
 
@@ -36,11 +36,9 @@ SECOES = [('ACOMPANHAMENTO', ('Visão Gerencial', 'FVI', 'FVM', 'CCM', 'TAP', 'T
           ('CONTROLE', ('Verificação', 'Histórico', 'Importações')),
           ('CONFIGURAÇÃO', ('Critérios',))]
 TODAS_UNIDADES = 'Todas as unidades'
-SITUACOES_TAG = ('Todas as situações', 'Válidas', 'Com pendência em algum campo', 'FVI Campo II aprovado',
-                 'Sem FVI gerada', 'Canceladas', 'Sem SSOP', 'SSOP fora da base')
-SITUACOES_MALHA = ('Todas as situações', 'Válidas', 'FVM Campo III pendente', 'FVM Campo III aprovado',
-                   'Canceladas', 'Sem SSOP', 'SSOP fora da base')
-GRUPO_COR = {'FVI': tema.SERIE[0], 'FVM': tema.SERIE[1], 'DOC': tema.SERIE[2]}
+TODOS_SOP = 'Todos os SOP'
+TODAS_SSOP = 'Todas as SSOP'
+TODAS_SITUACOES = 'Todas as situações'
 R_SSOP, R_SOP = 'ssop', 'sop'
 
 
@@ -171,26 +169,6 @@ class Tabela(Cartao):
         return [self.linhas[int(i)] for i in self.tree.selection()]
 
 
-class Indicador(Cartao):
-    """Cartão com anel de progresso, nome do indicador por extenso e o detalhe da conta."""
-
-    def __init__(self, master, titulo, cor):
-        super().__init__(master)
-        self.cor = cor
-        ctk.CTkLabel(self, text=titulo, font=tema.cfonte(14, 'bold'), text_color=tema.TEXTO, anchor='w').pack(
-            fill='x', padx=18, pady=(16, 6))
-        self.anel = ctk.CTkLabel(self, text='–', image=anel(None, cor, tamanho=100, espessura=9), compound='center',
-                                 font=tema.cfonte(17, 'bold'), text_color=tema.TEXTO)
-        self.anel.pack(pady=(2, 6))
-        self.detalhe = ctk.CTkLabel(self, text='', font=tema.cfonte(11), text_color=tema.TEXTO_2, wraplength=180,
-                                    justify='center')
-        self.detalhe.pack(padx=12, pady=(0, 16))
-
-    def definir(self, valor, detalhe):
-        self.anel.configure(image=anel(valor, self.cor, tamanho=100, espessura=9), text=pct_txt(valor))
-        self.detalhe.configure(text=detalhe)
-
-
 class CartaoGrafico(Cartao):
     def __init__(self, master, titulo, subtitulo, altura=290):
         super().__init__(master)
@@ -207,12 +185,22 @@ class App(ctk.CTk):
         self.geometry('1440x900')
         self.minsize(1180, 700)
         tema.aplicar(self)
+        self._icone_janela()
         self.banco = None
         self.R = None
         self._agendado = None
         self._montar()
         self.protocol('WM_DELETE_WINDOW', self.sair)
         self.abrir_banco(caminho_banco or configuracao.banco_padrao())
+
+    def _icone_janela(self):
+        try:
+            if os.name == 'nt':
+                self.iconbitmap(str(recurso('icone.ico')))
+            self._img_icone = tk.PhotoImage(file=str(recurso('icone.png')))
+            self.iconphoto(True, self._img_icone)
+        except tk.TclError:
+            pass
 
     # ------------------------------------------------------------------ estrutura
     def _menu(self, itens):
@@ -228,9 +216,8 @@ class App(ctk.CTk):
         menu.tk_popup(botao.winfo_rootx(), botao.winfo_rooty() + botao.winfo_height() + 4)
 
     def menu_importar(self):
-        return self._menu([('LI – base de SOP e SSOP…', self.importar_li), None]
-                          + [(servico.NOMES[t] + '…', lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_FIC]
-                          + [None, ('Listas oficiais de status (STATUS_*.xlsx)…', self.importar_status)])
+        return self._menu([('SSOP', self.importar_li)]
+                          + [(t, lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_FIC])
 
     def menu_banco(self):
         return self._menu([('Abrir ou criar banco de dados…', self.escolher_banco),
@@ -244,18 +231,15 @@ class App(ctk.CTk):
         ctk.CTkFrame(self, width=1, fg_color=tema.BORDA, corner_radius=0).pack(side='left', fill='y')
 
         marca = ctk.CTkFrame(lateral, fg_color='transparent')
-        marca.pack(fill='x', padx=18, pady=(24, 22))
-        img = logo([configuracao.pasta_programa(), configuracao.pasta_programa() / 'dados'])
-        if img:
-            self.logo = ctk.CTkLabel(marca, text='', image=img)
-        else:   # espaço reservado para a logo (coloque logo.png ao lado do programa)
-            self.logo = ctk.CTkLabel(marca, text='LOGO', width=46, height=46, corner_radius=12, fg_color=tema.FUNDO,
-                                     text_color=tema.TEXTO_MUDO, font=tema.cfonte(9, 'bold'))
-        self.logo.pack(side='left')
-        txt = ctk.CTkFrame(marca, fg_color='transparent')
-        txt.pack(side='left', padx=(12, 0))
-        ctk.CTkLabel(txt, text='Comissionamento', font=tema.cfonte(15, 'bold'), text_color=tema.TEXTO).pack(anchor='w')
-        ctk.CTkLabel(txt, text='EPC 12 · Controle gerencial', font=tema.cfonte(10), text_color=tema.TEXTO_MUDO).pack(anchor='w')
+        marca.pack(fill='x', padx=22, pady=(22, 16))
+        img = logo([configuracao.pasta_programa(), configuracao.pasta_programa() / 'dados'], altura=64)
+        self.logo = ctk.CTkLabel(marca, text='', image=img) if img else ctk.CTkLabel(
+            marca, text='LOGO', width=64, height=64, corner_radius=12, fg_color=tema.FUNDO,
+            text_color=tema.TEXTO_MUDO, font=tema.cfonte(9, 'bold'))
+        self.logo.pack(anchor='w')
+        ctk.CTkLabel(marca, text='Controle Gerencial de Comissionamento', font=tema.cfonte(12, 'bold'),
+                     text_color=tema.TEXTO, wraplength=200, justify='left').pack(anchor='w', pady=(10, 0))
+        ctk.CTkLabel(marca, text='EPC 12', font=tema.cfonte(11), text_color=tema.TEXTO_MUDO).pack(anchor='w')
 
         self.nav = {}
         for secao, paginas in SECOES:
@@ -315,9 +299,12 @@ class App(ctk.CTk):
 
         self.paginas = {}
         for nome, montar in (('Visão Gerencial', self._pg_visao), ('FVI', self._pg_fvi), ('FVM', self._pg_fvm),
-                             ('CCM', lambda f: self._pg_doc(f, 'CCM', rotulos.COL_CCM, R_SSOP)),
-                             ('TAP', lambda f: self._pg_doc(f, 'TAP', rotulos.COL_TAP, R_SSOP)),
-                             ('TTAS', lambda f: self._pg_doc(f, 'TTAS', rotulos.COL_TTAS, R_SOP)),
+                             ('CCM', lambda f: self._pg_doc(f, 'CCM', rotulos.COL_CCM, R_SSOP, 'txt_ccm_situacao',
+                                                            rotulos.SITUACOES_CCM)),
+                             ('TAP', lambda f: self._pg_doc(f, 'TAP', rotulos.COL_TAP, R_SSOP, 'txt_tap_situacao',
+                                                            rotulos.SITUACOES_TAP)),
+                             ('TTAS', lambda f: self._pg_doc(f, 'TTAS', rotulos.COL_TTAS, R_SOP, 'txt_ttas_situacao',
+                                                             rotulos.SITUACOES_TTAS)),
                              ('Verificação', self._pg_verificacao), ('Histórico', self._pg_historico),
                              ('Importações', self._pg_importacoes), ('Critérios', self._pg_criterios)):
             f = ctk.CTkFrame(self.corpo, fg_color='transparent')
@@ -343,80 +330,61 @@ class App(ctk.CTk):
         sc = self.visao_rolagem = ctk.CTkScrollableFrame(f, fg_color='transparent',
                                                          scrollbar_button_color=tema.BORDA_FORTE)
         sc.pack(fill='both', expand=True)
-        self.lbl_visao = ctk.CTkLabel(sc, text='', font=tema.cfonte(12), text_color=tema.TEXTO_MUDO, anchor='w')
-        self.lbl_visao.pack(fill='x', pady=(0, 10))
-        cards = ctk.CTkFrame(sc, fg_color='transparent')
-        cards.pack(fill='x')
-        self.ind = {}
-        defs = [('cii', 'FVI Campo II', 'FVI'), ('ciii', 'FVI Campo III', 'FVI'), ('cv', 'FVI Campo V', 'FVI'),
-                ('fvm_ciii', 'FVM Campo III', 'FVM'), ('fvm_cv', 'FVM Campo V', 'FVM'), ('ccm', 'CCM', 'DOC'),
-                ('tap', 'TAP', 'DOC'), ('ttas1', 'TTAS 1', 'DOC'), ('ttas2', 'TTAS 2', 'DOC')]
-        for i, (k, t, g) in enumerate(defs):
-            c = Indicador(cards, t, GRUPO_COR[g])
-            c.grid(row=i // 5, column=i % 5, sticky='nsew', padx=(0 if i % 5 == 0 else 14, 0), pady=(0, 14))
-            self.ind[k] = c
-        resumo = Cartao(cards)
-        resumo.grid(row=1, column=4, sticky='nsew', padx=(14, 0), pady=(0, 14))
-        ctk.CTkLabel(resumo, text='Base e cadastro', font=tema.cfonte(14, 'bold'), text_color=tema.TEXTO,
-                     anchor='w').pack(fill='x', padx=18, pady=(16, 8))
-        self.resumo = {}
-        for k, t in (('tags', 'TAGs válidas'), ('lidas', 'TAGs lidas no cadastro'), ('sem_fvi', 'TAGs sem FVI gerada'),
-                     ('sem_ssop', 'TAGs sem SSOP'), ('malhas', 'Malhas válidas (FVM)'), ('ssop', 'SSOP na base'),
-                     ('sop', 'SOP na base')):
-            linha = ctk.CTkFrame(resumo, fg_color='transparent')
-            linha.pack(fill='x', padx=18, pady=1)
-            ctk.CTkLabel(linha, text=t, font=tema.cfonte(12), text_color=tema.TEXTO_2).pack(side='left')
-            self.resumo[k] = ctk.CTkLabel(linha, text='–', font=tema.cfonte(12, 'bold'), text_color=tema.TEXTO)
-            self.resumo[k].pack(side='right')
-        for j in range(5):
-            cards.columnconfigure(j, weight=1, uniform='ind')
-
         graf = ctk.CTkFrame(sc, fg_color='transparent')
         graf.pack(fill='x')
         self.g = {}
-        defs = [('geral', 'Avanço geral', 'Os 9 indicadores do comissionamento (total do empreendimento)'),
-                ('fvi', 'FVI por unidade', 'TAGs aprovadas ÷ TAGs aplicáveis em cada campo'),
-                ('fvm', 'FVM por unidade', 'Malhas aprovadas ÷ malhas válidas em cada campo'),
-                ('ccm', 'CCM e TAP por unidade', 'SSOP com CCM aprovado e com TAP concluído ÷ SSOP da unidade'),
-                ('ttas', 'TTAS por unidade', 'SOP com TTAS 1 e TTAS 2 aprovados ÷ SOP da unidade'),
-                ('evol', 'Evolução geral do FVI', 'Total do empreendimento em cada data de referência do histórico')]
-        for i, (k, t, s) in enumerate(defs):
-            c = CartaoGrafico(graf, t, s, altura=320)
-            c.grid(row=i // 2, column=i % 2, sticky='nsew', padx=(0 if i % 2 == 0 else 14, 0), pady=(0, 14))
+        defs = [('fvi', 'FVI', 'TAGs aprovadas ÷ TAGs aplicáveis, por campo, em cada unidade e no total', 0, 2),
+                ('fvm', 'FVM', 'Malhas aprovadas ÷ malhas válidas, por campo, em cada unidade e no total', 1, 0),
+                ('ttas', 'TTAS', 'SOP com TTAS 1 e TTAS 2 aprovados ÷ SOP, em cada unidade e no total', 1, 1),
+                ('ccm', 'CCM', 'SSOP com CCM aprovado ÷ SSOP, em cada unidade e no total', 2, 0),
+                ('tap', 'TAP', 'SSOP com TAP concluído ÷ SSOP, em cada unidade e no total', 2, 1)]
+        for k, t, sub, lin, col in defs:
+            c = CartaoGrafico(graf, t, sub, altura=340)
+            larga = col == 2
+            c.grid(row=lin, column=0 if larga else col, columnspan=2 if larga else 1, sticky='nsew',
+                   padx=(0 if larga or col == 0 else 14, 0), pady=(0, 14))
             self.g[k] = c.g
         graf.columnconfigure(0, weight=1, uniform='g')
         graf.columnconfigure(1, weight=1, uniform='g')
 
-        titulo_secao(sc, 'Avanço por unidade', 'Clique no nome de uma coluna para ordenar').pack(fill='x', pady=(6, 8))
-        self.t_visao = Tabela(sc, rotulos.COL_VISAO, altura=14)
-        self.t_visao.pack(fill='x')
-        for t in rotulos.NOTAS_VISAO:
-            nota(sc, t).pack(fill='x', pady=(4, 0))
-
-    def _filtros(self, f, d, situacoes):
+    def _filtros(self, f, d, situacoes=None):
+        """Unidade → SOP → SSOP em cascata; busca por TAG/malha (FVI/FVM) ou situação (CCM/TAP/TTAS)."""
         barra = Cartao(f)
         barra.pack(fill='x', pady=(0, 12))
         dentro = ctk.CTkFrame(barra, fg_color='transparent')
         dentro.pack(fill='x', padx=14, pady=12)
-        d['unidade'] = ctk.CTkOptionMenu(dentro, values=[TODAS_UNIDADES], width=190,
-                                         command=lambda v: self._preencher(d), **estilo_opcoes())
-        d['unidade'].pack(side='left')
-        if situacoes:
-            d['situacao'] = ctk.CTkOptionMenu(dentro, values=list(situacoes), width=260,
-                                              command=lambda v: self._preencher(d), **estilo_opcoes())
-            d['situacao'].pack(side='left', padx=(10, 0))
-        d['busca'] = ctk.CTkEntry(dentro, placeholder_text=d['dica_busca'], width=300, height=36, corner_radius=10,
-                                  border_width=1, border_color=tema.BORDA, fg_color=tema.FUNDO, font=tema.cfonte(12))
-        d['busca'].pack(side='left', padx=(10, 0))
-        d['busca'].bind('<KeyRelease>', lambda ev: self._agendar(d))
-        botao_sec(dentro, 'Limpar filtros', 'limpar', lambda: self._limpar(d)).pack(side='left', padx=(6, 0))
         d['contagem'] = ctk.CTkLabel(dentro, text='', height=30, corner_radius=15, fg_color=tema.DESTAQUE_CLARO,
                                      text_color=tema.DESTAQUE_ESCURO, font=tema.cfonte(12, 'bold'), padx=12)
         d['contagem'].pack(side='right')
+        d['unidade'] = ctk.CTkOptionMenu(dentro, values=[TODAS_UNIDADES], width=170,
+                                         command=lambda v: self._mudou_unidade(d), **estilo_opcoes())
+        d['unidade'].pack(side='left')
+        estilo_cb = dict(height=36, corner_radius=10, border_width=1, border_color=tema.BORDA, fg_color=tema.FUNDO,
+                         button_color=tema.FUNDO, button_hover_color=tema.BORDA, text_color=tema.TEXTO,
+                         font=tema.cfonte(12), dropdown_font=tema.cfonte(12))
+        d['sop'] = ctk.CTkComboBox(dentro, values=[TODOS_SOP], width=210, command=lambda v: self._mudou_sop(d), **estilo_cb)
+        d['sop'].set(TODOS_SOP)
+        d['sop'].pack(side='left', padx=(10, 0))
+        d['ssop'] = ctk.CTkComboBox(dentro, values=[TODAS_SSOP], width=240, command=lambda v: self._preencher(d),
+                                    **estilo_cb)
+        d['ssop'].set(TODAS_SSOP)
+        d['ssop'].pack(side='left', padx=(10, 0))
+        for w in (d['sop'], d['ssop']):
+            w.bind('<KeyRelease>', lambda ev: self._agendar(d))
+        if situacoes:
+            d['situacao'] = ctk.CTkOptionMenu(dentro, values=[TODAS_SITUACOES] + list(situacoes), width=190,
+                                              command=lambda v: self._preencher(d), **estilo_opcoes())
+            d['situacao'].pack(side='left', padx=(10, 0))
+        if d.get('ident'):
+            d['busca'] = ctk.CTkEntry(dentro, placeholder_text=d['dica_busca'], width=190, height=36, corner_radius=10,
+                                      border_width=1, border_color=tema.BORDA, fg_color=tema.FUNDO, font=tema.cfonte(12))
+            d['busca'].pack(side='left', padx=(10, 0))
+            d['busca'].bind('<KeyRelease>', lambda ev: self._agendar(d))
+        botao_sec(dentro, 'Limpar filtros', 'limpar', lambda: self._limpar(d)).pack(side='left', padx=(6, 0))
 
     def _pg_fvi(self, f):
-        d = self.fvi = {'nome': 'FVI', 'dica_busca': 'Buscar TAG, SSOP ou descrição'}
-        self._filtros(f, d, SITUACOES_TAG)
+        d = self.fvi = {'nome': 'FVI', 'ident': 'tag', 'dica_busca': 'Buscar TAG'}
+        self._filtros(f, d)
         nota(f, 'Cada campo mostra se conta como aprovado pelos critérios e, entre parênteses, o status da FIC: '
                 '"Aprovado", "Pendente" ou "Não se aplica" (fora da conta). Linhas em amarelo: TAG sem FVI gerada · '
                 'em vermelho: sem SSOP ou SSOP fora da base · em cinza: TAG cancelada.').pack(side='bottom', fill='x', pady=(8, 0))
@@ -424,17 +392,17 @@ class App(ctk.CTk):
         d['tabela'].pack(fill='both', expand=True)
 
     def _pg_fvm(self, f):
-        d = self.fvm = {'nome': 'FVM', 'dica_busca': 'Buscar malha ou SSOP'}
-        self._filtros(f, d, SITUACOES_MALHA)
+        d = self.fvm = {'nome': 'FVM', 'ident': 'malha', 'dica_busca': 'Buscar malha'}
+        self._filtros(f, d)
         nota(f, 'Cada campo mostra se conta como aprovado pelos critérios da FVM (página Critérios) e, entre parênteses, '
                 'o status da malha. Layout da planilha de FVM ainda provisório: MALHA | SOP | SSOP | STATUS.').pack(
             side='bottom', fill='x', pady=(8, 0))
         d['tabela'] = Tabela(f, rotulos.COL_MALHAS)
         d['tabela'].pack(fill='both', expand=True)
 
-    def _pg_doc(self, f, nome, colunas, fonte):
-        d = {'nome': nome, 'dica_busca': 'Buscar SOP, SSOP ou descrição', 'fonte': fonte}
-        self._filtros(f, d, None)
+    def _pg_doc(self, f, nome, colunas, fonte, campo_situacao, situacoes):
+        d = {'nome': nome, 'fonte': fonte, 'campo_situacao': campo_situacao}
+        self._filtros(f, d, situacoes)
         d['tabela'] = Tabela(f, colunas)
         d['tabela'].pack(fill='both', expand=True)
         setattr(self, 'doc_' + nome.lower(), d)
@@ -490,7 +458,10 @@ class App(ctk.CTk):
         corpo.pack(fill='both', expand=True)
         dir_ = ctk.CTkFrame(corpo, fg_color='transparent')
         dir_.pack(side='right', fill='y', padx=(14, 0))
-        titulo_secao(dir_, 'Listas oficiais de status da FIC').pack(fill='x', pady=(0, 8))
+        cab = ctk.CTkFrame(dir_, fg_color='transparent')
+        cab.pack(fill='x', pady=(0, 8))
+        titulo_secao(cab, 'Listas oficiais de status da FIC').pack(side='left')
+        botao_sec(cab, 'Importar listas', 'importar', self.importar_status).pack(side='right')
         self.t_status = Tabela(dir_, rotulos.COL_STATUS)
         self.t_status.pack(fill='both', expand=True)
         esq = ctk.CTkFrame(corpo, fg_color='transparent')
@@ -702,14 +673,13 @@ class App(ctk.CTk):
         self.chip_data.configure(text=f'Data de referência: {data or "sem importação"}')
         self.lbl_banco.configure(text=f'{b.caminho.name}\nversão {__version__}')
         self.title(f'{TITULO} – {b.caminho.name}')
-        self.lbl_visao.configure(text=f'Data de referência {data or "–"}   ·   TAGs sem FVI gerada entram no cálculo do '
-                                      f'FVI: {"Sim" if b.incluir_sem_fvi else "Não"}')
-        self.t_visao.preencher(R.visao + [R.total], lambda r: ('total',) if r['unidade'] == 'TOTAL' else ())
         unidades = [TODAS_UNIDADES] + R.unidades
+        self._sop_de_ssop = {s['ssop']: s['sop'] for s in R.ssop}
         for d in self._detalhes():
             d['unidade'].configure(values=unidades)
             if d['unidade'].get() not in unidades:
                 d['unidade'].set(TODAS_UNIDADES)
+            self._opcoes_sop(d)
             self._preencher(d)
         res = {'OK': 'OK', 'VERIFICAR': 'Verificar', 'INFO': 'Informação'}
         self.t_ver.preencher([{'g': g, 't': t, 'e': '-' if e is None else e, 'a': a, 'r': res[r]}
@@ -739,55 +709,64 @@ class App(ctk.CTk):
         return [self.fvi, self.fvm, self.doc_ccm, self.doc_tap, self.doc_ttas]
 
     def _atualizar_visao(self):
-        R, t = self.R, self.R.total
-        n = R.contagens.get('FVI', {})
-        detalhes = {
-            'cii': f'{numero(t["cii_aprov"])} de {numero(t["cii_aplic"])} TAGs aplicáveis aprovadas',
-            'ciii': f'{numero(t["ciii_aprov"])} de {numero(t["ciii_aplic"])} TAGs aplicáveis aprovadas',
-            'cv': f'{numero(t["cv_aprov"])} de {numero(t["cv_aplic"])} TAGs aplicáveis aprovadas',
-            'fvm_ciii': f'{numero(t["fvm_ciii"])} de {numero(t["malhas"])} malhas aprovadas',
-            'fvm_cv': f'{numero(t["fvm_cv"])} de {numero(t["malhas"])} malhas aprovadas',
-            'ccm': f'{t["ccm"]} de {t["ssop"]} SSOP com CCM aprovado',
-            'tap': f'{t["tap"]} de {t["ssop"]} SSOP com TAP concluído',
-            'ttas1': f'{t["ttas1"]} de {t["sop"]} SOP com TTAS 1 aprovado',
-            'ttas2': f'{t["ttas2"]} de {t["sop"]} SOP com TTAS 2 aprovado'}
-        for k, det in detalhes.items():
-            self.ind[k].definir(t['pct_' + k], det)
-        for k, v in (('tags', t['tags']), ('lidas', n.get('lidas', 0)), ('sem_fvi', t['tags_sem_fvi']),
-                     ('sem_ssop', n.get('sem_ssop', 0)), ('malhas', t['malhas']), ('ssop', t['ssop']), ('sop', t['sop'])):
-            self.resumo[k].configure(text=numero(v))
-
-        grupo = {'pct_cii': 'FVI', 'pct_ciii': 'FVI', 'pct_cv': 'FVI', 'pct_fvm_ciii': 'FVM', 'pct_fvm_cv': 'FVM'}
-        self.g['geral'].barras_avanco(
-            [(nome, t[k], GRUPO_COR[grupo.get(k, 'DOC')], detalhes[k[4:]]) for k, nome in rotulos.INDICADORES],
-            [('FVI', GRUPO_COR['FVI']), ('FVM', GRUPO_COR['FVM']), ('CCM, TAP e TTAS', GRUPO_COR['DOC'])])
-        un = [v['unidade'] for v in R.visao]
+        R = self.R
+        linhas = R.visao + [R.total]
+        cat = [v['unidade'] for v in R.visao] + ['Total']
 
         def serie(nome, k, i):
-            return (nome, tema.SERIE[i], [v[k] for v in R.visao])
+            return (nome, tema.SERIE[i], [v[k] for v in linhas])
 
         def rodape(campos):
-            return lambda i, j: f'{R.visao[i][campos[j][0]]} de {R.visao[i][campos[j][1]]}'
-        self.g['fvi'].colunas_agrupadas(
-            un, [serie('FVI Campo II', 'pct_cii', 0), serie('FVI Campo III', 'pct_ciii', 1), serie('FVI Campo V', 'pct_cv', 2)],
-            rodape([('cii_aprov', 'cii_aplic'), ('ciii_aprov', 'ciii_aplic'), ('cv_aprov', 'cv_aplic')]))
-        self.g['fvm'].colunas_agrupadas(un, [serie('FVM Campo III', 'pct_fvm_ciii', 0), serie('FVM Campo V', 'pct_fvm_cv', 1)],
-                                        rodape([('fvm_ciii', 'malhas'), ('fvm_cv', 'malhas')]))
-        self.g['ccm'].colunas_agrupadas(un, [serie('CCM', 'pct_ccm', 0), serie('TAP', 'pct_tap', 1)],
-                                        rodape([('ccm', 'ssop'), ('tap', 'ssop')]))
-        self.g['ttas'].colunas_agrupadas(un, [serie('TTAS 1', 'pct_ttas1', 0), serie('TTAS 2', 'pct_ttas2', 1)],
-                                         rodape([('ttas1', 'sop'), ('ttas2', 'sop')]))
-        hist = [h for h in servico.historico_com_percentuais(self.banco) if h['unidade'] == 'TOTAL']
-        self.g['evol'].linhas([h['data'][:5] for h in hist],
-                              [(nome, tema.SERIE[i], [h[k] for h in hist])
-                               for i, (k, nome) in enumerate(rotulos.INDICADORES[:3])])
+            return lambda i, j: f'{numero(linhas[i][campos[j][0]])} de {numero(linhas[i][campos[j][1]])}'
+        graf = (('fvi', [serie('FVI Campo II', 'pct_cii', 0), serie('FVI Campo III', 'pct_ciii', 1),
+                         serie('FVI Campo V', 'pct_cv', 2)],
+                 [('cii_aprov', 'cii_aplic'), ('ciii_aprov', 'ciii_aplic'), ('cv_aprov', 'cv_aplic')]),
+                ('fvm', [serie('FVM Campo III', 'pct_fvm_ciii', 0), serie('FVM Campo V', 'pct_fvm_cv', 1)],
+                 [('fvm_ciii', 'malhas'), ('fvm_cv', 'malhas')]),
+                ('ttas', [serie('TTAS 1', 'pct_ttas1', 0), serie('TTAS 2', 'pct_ttas2', 1)],
+                 [('ttas1', 'sop'), ('ttas2', 'sop')]),
+                ('ccm', [serie('CCM', 'pct_ccm', 0)], [('ccm', 'ssop')]),
+                ('tap', [serie('TAP', 'pct_tap', 0)], [('tap', 'ssop')]))
+        for k, series, campos in graf:
+            self.g[k].colunas_agrupadas(cat, series, rodape(campos), destaque_ultimo=True)
 
     # ------------------------------------------------------------------ páginas de detalhe
+    def _opcoes_sop(self, d):
+        u = d['unidade'].get()
+        sops = [s['sop'] for s in self.R.sop if u == TODAS_UNIDADES or s['unidade'] == u]
+        d['sop'].configure(values=[TODOS_SOP] + sops)
+        if d['sop'].get() not in [TODOS_SOP] + sops:
+            d['sop'].set(TODOS_SOP)
+        self._opcoes_ssop(d)
+
+    def _opcoes_ssop(self, d):
+        u, sop = d['unidade'].get(), d['sop'].get()
+        ssops = [s['ssop'] for s in self.R.ssop if (u == TODAS_UNIDADES or s['unidade'] == u)
+                 and (sop in ('', TODOS_SOP) or s['sop'] == sop)]
+        d['ssop'].configure(values=[TODAS_SSOP] + ssops)
+        if d['ssop'].get() not in [TODAS_SSOP] + ssops:
+            d['ssop'].set(TODAS_SSOP)
+
+    def _mudou_unidade(self, d):
+        d['sop'].set(TODOS_SOP)
+        d['ssop'].set(TODAS_SSOP)
+        self._opcoes_sop(d)
+        self._preencher(d)
+
+    def _mudou_sop(self, d):
+        d['ssop'].set(TODAS_SSOP)
+        self._opcoes_ssop(d)
+        self._preencher(d)
+
     def _limpar(self, d):
-        d['busca'].delete(0, 'end')
         d['unidade'].set(TODAS_UNIDADES)
+        d['sop'].set(TODOS_SOP)
+        d['ssop'].set(TODAS_SSOP)
+        if 'busca' in d:
+            d['busca'].delete(0, 'end')
         if 'situacao' in d:
-            d['situacao'].set(d['situacao'].cget('values')[0])
+            d['situacao'].set(TODAS_SITUACOES)
+        self._opcoes_sop(d)
         self._preencher(d)
 
     def _agendar(self, d):
@@ -795,44 +774,42 @@ class App(ctk.CTk):
             self.after_cancel(self._agendado)
         self._agendado = self.after(250, lambda: self._preencher(d))
 
+    @staticmethod
+    def _texto_filtro(widget, padrao):
+        v = widget.get().strip().upper()
+        return '' if v in ('', padrao.upper()) else v
+
     def _preencher(self, d):
         R = self.R
         if d['nome'] == 'FVI':
-            linhas, campos, unidade = R.tags, ('tag', 'ssop', 'descricao'), 'TAGs'
+            linhas, unidade = R.tags, 'TAGs'
         elif d['nome'] == 'FVM':
-            linhas, campos, unidade = R.malhas, ('malha', 'ssop'), 'malhas'
+            linhas, unidade = R.malhas, 'malhas'
         elif d['fonte'] == R_SSOP:
-            linhas, campos, unidade = R.ssop, ('sop', 'ssop', 'descricao'), 'SSOP'
+            linhas, unidade = R.ssop, 'SSOP'
         else:
-            linhas, campos, unidade = R.sop, ('sop', 'descricao'), 'SOP'
+            linhas, unidade = R.sop, 'SOP'
         u = d['unidade'].get()
         if u != TODAS_UNIDADES:
             linhas = [r for r in linhas if r.get('unidade') == u]
-        if 'situacao' in d:
-            linhas = [r for r in linhas if self._filtro_situacao(d['situacao'].get(), r)]
-        busca = d['busca'].get().strip().upper()
-        if busca:
-            linhas = [r for r in linhas if any(busca in str(r.get(c) or '').upper() for c in campos)]
+        sop = self._texto_filtro(d['sop'], TODOS_SOP)
+        if sop:
+            linhas = [r for r in linhas if sop in str(r.get('sop') or '').upper()]
+        ssop = self._texto_filtro(d['ssop'], TODAS_SSOP)
+        if ssop:
+            if unidade == 'SOP':   # TTAS é por SOP: mantém o SOP que contém a SSOP buscada
+                sops = {self._sop_de_ssop[s] for s in self._sop_de_ssop if ssop in s.upper()}
+                linhas = [r for r in linhas if r['sop'] in sops]
+            else:
+                linhas = [r for r in linhas if ssop in str(r.get('ssop') or '').upper()]
+        if 'situacao' in d and d['situacao'].get() != TODAS_SITUACOES:
+            linhas = [r for r in linhas if r[d['campo_situacao']] == d['situacao'].get()]
+        if 'busca' in d:
+            busca = d['busca'].get().strip().upper()
+            if busca:
+                linhas = [r for r in linhas if busca in str(r.get(d['ident']) or '').upper()]
         d['tabela'].preencher(linhas, self._cor_linha if d['nome'] in ('FVI', 'FVM') else None)
         d['contagem'].configure(text=f'{numero(len(linhas))} {unidade}')
-
-    @staticmethod
-    def _filtro_situacao(sit, r):
-        if sit == 'Todas as situações':
-            return True
-        valida = r['situacao'] == 'VÁLIDA'
-        regras = {
-            'Válidas': lambda: valida,
-            'Canceladas': lambda: r['situacao'] == 'CANCELADA',
-            'Sem SSOP': lambda: r['situacao'] == 'SEM SSOP',
-            'SSOP fora da base': lambda: r['situacao'] == 'FORA DA BASE',
-            'Sem FVI gerada': lambda: r.get('sem_fvi', False),
-            'FVI Campo II aprovado': lambda: valida and r['ok_cii'] is True,
-            'Com pendência em algum campo': lambda: valida and any(r['ok_' + c] is False for c in ('cii', 'ciii', 'cv')),
-            'FVM Campo III pendente': lambda: valida and r['ok_ciii'] is False,
-            'FVM Campo III aprovado': lambda: valida and r['ok_ciii'] is True,
-        }
-        return regras.get(sit, lambda: True)()
 
     @staticmethod
     def _cor_linha(r):
@@ -857,16 +834,17 @@ class App(ctk.CTk):
 
     def ajuda(self):
         messagebox.showinfo('Como usar', (
-            '1. Importar planilha ▸ LI – base de SOP e SSOP (uma vez, ou quando a LI for revisada).\n'
-            '2. Importar planilha ▸ Relatório de Cadastro Geral (FVI): o arquivo exportado da FIC, sem editar.\n'
+            '1. Importar planilha ▸ SSOP: a LI com a base de SOP e SSOP (uma vez, ou quando a LI for revisada).\n'
+            '2. Importar planilha ▸ FVI: o Relatório de Cadastro Geral exportado da FIC, sem editar.\n'
             '   FVM, CCM, TAP e TTAS: planilhas com cabeçalho reconhecido pelo nome das colunas\n'
             '   (Banco de dados ▸ Exportar planilhas-modelo mostra o formato).\n'
             '3. Confirme a data de referência: o avanço fica registrado no Histórico nessa data.\n'
             '4. Confira a página Verificação (os testes devem resultar OK) antes de apresentar.\n'
             '5. Exportar Excel gera a planilha gerencial para envio, com as mesmas páginas e gráficos.\n\n'
-            'Visão Gerencial: os 9 indicadores, gráficos e a tabela por unidade.\n'
-            'FVI: cada TAG com a SSOP e a situação dos Campos II, III e V. FVM: cada malha com os Campos III e V.\n'
-            'Para usar a logo da empresa, coloque um arquivo logo.png na mesma pasta do programa.'))
+            'Visão Gerencial: gráficos de FVI, FVM, CCM, TAP e TTAS por unidade e o total.\n'
+            'FVI e FVM: filtre por unidade, SOP, SSOP e TAG (ou malha).\n'
+            'CCM, TAP e TTAS: filtre por unidade, SOP, SSOP e situação.\n'
+            'As listas oficiais de status da FIC são importadas na página Critérios.'))
 
     def sobre(self):
         messagebox.showinfo('Sobre', f'{TITULO}\nVersão {__version__}\n\nBanco de dados: {self.banco.caminho if self.banco else "-"}')

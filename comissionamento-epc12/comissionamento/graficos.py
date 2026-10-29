@@ -86,13 +86,15 @@ class Grafico(tk.Canvas):
         return lambda v: y1 - (y1 - y0) * max(0, min(1, v))
 
     # --------------------------------------------------------------- tipos
-    def colunas_agrupadas(self, categorias, series, rodape=None):
-        """series: [(nome, cor, [valor 0..1 | None por categoria])] – até 3 séries."""
+    def colunas_agrupadas(self, categorias, series, rodape=None, destaque_ultimo=False):
+        """series: [(nome, cor, [valor 0..1 | None por categoria])] – até 3 séries. Com uma série só não há legenda
+        (o título identifica). destaque_ultimo: a última categoria (Total) vem separada por uma linha e em negrito."""
         def desenhar(w, h, e):
             if not categorias or all(v is None for _, _, vals in series for v in vals):
                 return self.vazio(w, h)
-            self.legenda([(n, c) for n, c, _ in series], e)
-            x0, y0, x1, y1 = 44 * e, 86 * e, w - 6 * e, h - 42 * e
+            if len(series) > 1:
+                self.legenda([(n, c) for n, c, _ in series], e)
+            x0, y0, x1, y1 = 44 * e, (86 if len(series) > 1 else 62) * e, w - 6 * e, h - 42 * e
             ymap = self.eixo_pct(x0, y0, x1, y1)
             grupo = (x1 - x0) / len(categorias)
             larg = max(3, min(16 * e, (grupo - 12 * e) / len(series) - 3))
@@ -110,29 +112,14 @@ class Grafico(tk.Canvas):
                     texto = f'{cat}\n{nome}: {pct_txt(v)}' + (f'\n{rodape(i, j)}' if rodape else '')
                     self.dica(item, texto)
                     self.dica(alvo, texto)
-                desloca = 14 * e if (grupo < len(cat) * 7 * e + 6 and i % 2) else 0
-                self.create_text(cx, y1 + 7 * e + desloca, text=cat, anchor='n', font=tema.fonte(8), fill=tema.TEXTO_2)
-        self.definir(desenhar)
-
-    def barras_avanco(self, itens, legenda):
-        """Uma barra horizontal por indicador. itens: [(rótulo, valor 0..1|None, cor, detalhe)]."""
-        def desenhar(w, h, e):
-            if not itens or all(v is None for _, v, _, _ in itens):
-                return self.vazio(w, h)
-            self.legenda(legenda, e)
-            x0, y0, x1, y1 = 112 * e, 82 * e, w - 58 * e, h - 6 * e
-            faixa = (y1 - y0) / len(itens)
-            alt = max(6, min(12 * e, faixa - 10 * e))
-            for i, (rot, v, cor, detalhe) in enumerate(itens):
-                cy = y0 + faixa * i + faixa / 2
-                self.create_text(x0 - 10 * e, cy, text=rot, anchor='e', font=tema.fonte(9), fill=tema.TEXTO_2)
-                self.create_rectangle(x0, cy - alt / 2, x1, cy + alt / 2, fill=tema.TRILHA, outline='')
-                if v:
-                    item = self.create_rectangle(x0, cy - alt / 2, x0 + (x1 - x0) * min(1, v), cy + alt / 2, fill=cor, outline='')
-                    self.dica(item, f'{rot}: {pct_txt(v)}\n{detalhe}')
-                alvo = self.create_rectangle(x0, cy - faixa / 2, x1, cy + faixa / 2, fill='', outline='')
-                self.dica(alvo, f'{rot}: {pct_txt(v)}\n{detalhe}')
-                self.create_text(x1 + 8 * e, cy, text=pct_txt(v), anchor='w', font=tema.fonte(9, 'bold'), fill=tema.TEXTO)
+                ultimo = destaque_ultimo and i == len(categorias) - 1
+                if ultimo:
+                    xs = x0 + grupo * i
+                    self.create_line(xs, y0, xs, y1 + 4 * e, fill=tema.EIXO, dash=(3, 3))
+                desloca = 14 * e if (grupo < len(cat) * 7 * e + 6 and i % 2 and not ultimo) else 0
+                self.create_text(cx, y1 + 7 * e + desloca, text=cat, anchor='n',
+                                 font=tema.fonte(8, 'bold') if ultimo else tema.fonte(8),
+                                 fill=tema.TEXTO if ultimo else tema.TEXTO_2)
         self.definir(desenhar)
 
     def linhas(self, rotulos, series):

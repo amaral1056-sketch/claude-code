@@ -18,9 +18,11 @@ rel = pasta / 'relatorio.xlsx'
 r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db'), '--li', str(li), '--importar', 'FVI', str(cad),
                     '--exportar', str(rel)], timeout=300)
 assert r.returncode == 0, f'executável terminou com código {r.returncode}'
-vg = openpyxl.load_workbook(rel)['Visão Gerencial']
-total = [vg.cell(12, c).value for c in (1, 4, 5)]     # linha TOTAL da tabela por unidade
-assert total[0] == 'TOTAL' and total[1] == 7 and abs(total[2] - 4 / 6) < 1e-9, total
+wb = openpyxl.load_workbook(rel)
+assert len(wb['Visão Gerencial']._charts) == 5
+dg = wb['Dados dos gráficos']
+total = [dg.cell(4, c).value for c in (1, 4, 5)]      # 2 unidades fictícias + linha Total
+assert total[0] == 'Total' and total[1] == 7 and abs(total[2] - 4 / 6) < 1e-9, total
 # interface: abre a janela em modo de teste (todas as páginas) e confere que ela gravou o sinal de "ok"
 marca = pasta / 'interface_ok.txt'
 r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db')], timeout=300,

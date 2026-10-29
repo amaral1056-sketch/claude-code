@@ -68,21 +68,23 @@ def _realcar(ws, linhas, coluna, cores, linha0=1, ncols=None):
                 ws.cell(i, j).fill = fill
 
 
-def _grafico(ws, titulo, ref_linhas, colunas_pct, ancora, cab_linha):
-    """Colunas agrupadas por unidade usando as colunas % da tabela da visão gerencial."""
+def _grafico(ws, dados, titulo, ref_linhas, colunas_pct, ancora, largura=16):
+    """Colunas agrupadas por unidade (e Total) usando as colunas % da aba 'Dados dos gráficos'."""
     g = BarChart()
     g.type, g.grouping, g.title = 'col', 'clustered', titulo
     g.y_axis.number_format, g.y_axis.scaling.min, g.y_axis.scaling.max = '0%', 0, 1
     g.y_axis.majorGridlines = None
-    g.height, g.width, g.gapWidth = 7.5, 16, 80
+    g.height, g.width, g.gapWidth = 8, largura, 80
     a, b = ref_linhas
     for i, col in enumerate(colunas_pct):
-        dados = Reference(ws, min_col=col, min_row=cab_linha, max_row=b)
-        g.add_data(dados, titles_from_data=True)
+        g.add_data(Reference(dados, min_col=col, min_row=a - 1, max_row=b), titles_from_data=True)
         g.series[-1].graphicalProperties.solidFill = SERIE[i]
         g.series[-1].graphicalProperties.line.solidFill = SERIE[i]
-    g.set_categories(Reference(ws, min_col=1, min_row=a, max_row=b))
-    g.legend.position = 'b'
+    g.set_categories(Reference(dados, min_col=1, min_row=a, max_row=b))
+    if len(colunas_pct) > 1:
+        g.legend.position = 'b'
+    else:
+        g.legend = None
     ws.add_chart(g, ancora)
 
 
@@ -90,39 +92,29 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
     rotulos.preparar(R)
     wb = Workbook()
 
-    # ---------------------------------------------------------------- Visão Gerencial
+    # ---------------------------------------------------------------- Visão Gerencial (só gráficos)
     ws = wb.active
     ws.title = 'Visão Gerencial'
     ws.sheet_view.showGridLines = False
-    ws.cell(1, 1, 'Visão Gerencial – Avanço do Comissionamento por Unidade – EPC 12').font = Font(name=F, bold=True, size=15)
+    ws.cell(1, 1, 'Visão Gerencial – Acompanhamento do Comissionamento – EPC 12').font = Font(name=F, bold=True, size=15)
     ws.cell(2, 1, f'Data de referência: {data_referencia or "–"}   ·   Gerado em {datetime.datetime.now():%d/%m/%Y %H:%M}'
                   f'   ·   TAGs sem FVI gerada entram no cálculo do FVI: {"Sim" if incluir_sem_fvi else "Não"}').font = Font(
         name=F, size=10, color='5F6670')
-    # quadro de indicadores gerais
-    ws.cell(4, 1, 'Indicadores gerais').font = Font(name=F, bold=True, size=12)
-    for j, (k, titulo) in enumerate(rotulos.INDICADORES, 1):
-        c = ws.cell(5, j, titulo)
-        c.font, c.fill, c.alignment = HF, HFILL, Alignment(horizontal='center', vertical='center', wrap_text=True)
-        v = ws.cell(6, j, R.total[k])
-        v.number_format, v.font, v.alignment = PCT, Font(name=F, bold=True, size=14), Alignment(horizontal='center')
-    ws.row_dimensions[5].height = 30
-    ws.row_dimensions[6].height = 26
-    ws.cell(8, 1, 'Avanço por unidade').font = Font(name=F, bold=True, size=12)
-    cab = 9
-    fim = _tabela(ws, COL_VISAO, R.visao + [R.total], linha0=cab, filtro=False)
+    # números dos gráficos (unidades + Total) em aba própria
+    dados = wb.create_sheet('Dados dos gráficos')
+    linhas = [dict(v) for v in R.visao] + [{**R.total, 'unidade': 'Total'}]
+    fim = _tabela(dados, COL_VISAO, linhas, filtro=False)
     for j in range(1, len(COL_VISAO) + 1):
-        ws.cell(fim, j).font, ws.cell(fim, j).fill = BF, TOTAL_FILL
+        dados.cell(fim, j).font, dados.cell(fim, j).fill = BF, TOTAL_FILL
     for i, t in enumerate(NOTAS_VISAO, fim + 2):
-        ws.cell(i, 1, t).font = Font(name=F, italic=True, size=9, color='5F6670')
-    # gráficos (unidades, sem a linha TOTAL)
-    linhas_un = (cab + 1, fim - 1)
+        dados.cell(i, 1, t).font = Font(name=F, italic=True, size=9, color='5F6670')
     col = {k: j for j, (_, k, _, _) in enumerate(COL_VISAO, 1)}
-    g0 = fim + 6
-    _grafico(ws, 'FVI por unidade', linhas_un, [col['pct_cii'], col['pct_ciii'], col['pct_cv']], f'A{g0}', cab)
-    _grafico(ws, 'FVM por unidade', linhas_un, [col['pct_fvm_ciii'], col['pct_fvm_cv']], f'J{g0}', cab)
-    _grafico(ws, 'CCM e TAP por unidade', linhas_un, [col['pct_ccm'], col['pct_tap']], f'A{g0 + 17}', cab)
-    _grafico(ws, 'TTAS por unidade', linhas_un, [col['pct_ttas1'], col['pct_ttas2']], f'J{g0 + 17}', cab)
-    ws.freeze_panes = None
+    faixa = (2, fim)
+    _grafico(ws, dados, 'FVI', faixa, [col['pct_cii'], col['pct_ciii'], col['pct_cv']], 'A4', largura=32)
+    _grafico(ws, dados, 'FVM', faixa, [col['pct_fvm_ciii'], col['pct_fvm_cv']], 'A21')
+    _grafico(ws, dados, 'TTAS', faixa, [col['pct_ttas1'], col['pct_ttas2']], 'K21')
+    _grafico(ws, dados, 'CCM', faixa, [col['pct_ccm']], 'A38')
+    _grafico(ws, dados, 'TAP', faixa, [col['pct_tap']], 'K38')
 
     # ---------------------------------------------------------------- FVI e FVM (item a item)
     cores = {'Sem FVI gerada': AMARELO, 'Sem SSOP': VERMELHO, 'SSOP fora da base': VERMELHO}
@@ -156,6 +148,7 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
             if str(r['origem']).startswith('A CONFIRMAR'):
                 for j in (1, 2, 3):
                     ws.cell(i, j).fill = AMARELO
+    wb.move_sheet('Dados dos gráficos', offset=len(wb.sheetnames))
     wb.save(destino)
 
 
