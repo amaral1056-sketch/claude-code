@@ -13,7 +13,7 @@ from . import __version__, configuracao, exportacao, rotulos, servico, tema
 from .banco import Banco
 from .graficos import Grafico, Pizza, pct_txt
 from .icones import icone, logo, recurso
-from .importacao import NOMES_BASE, ErroImportacao
+from .importacao import ErroImportacao
 from .padroes import ETAPAS
 
 TITULO = 'Controle Gerencial de Comissionamento – EPC 12'
@@ -23,9 +23,9 @@ XLSX = [('Planilhas Excel', '*.xlsx *.xlsm'), ('Todos os arquivos', '*.*')]
 PAGINAS = {
     'Visão Gerencial': ('visao', 'Status da FIC em FVI, FVM, CCM, TAP e TTAS – geral ou por unidade'),
     'FVI': ('fvi', 'Acompanhamento TAG a TAG dos Campos II, III e V da FVI'),
-    'FVM': ('fvm', 'Acompanhamento malha a malha dos Campos III e V da FVM'),
+    'FVM': ('fvm', 'Acompanhamento malha a malha – status da malha na FIC'),
     'CCM': ('ccm', 'Acompanhamento do CCM por SSOP'),
-    'TAP': ('tap', 'Acompanhamento do TAP por SSOP'),
+    'TAP': ('tap', 'Acompanhamento do TAP por SOP'),
     'TTAS': ('ttas', 'Acompanhamento do TTAS 1 e do TTAS 2 por SOP'),
     'Verificação': ('verificacao', 'Testes das importações e pendências encontradas linha a linha'),
     'Histórico': ('historico', 'Evolução do avanço em cada data de referência'),
@@ -267,19 +267,14 @@ class App(ctk.CTk):
     def _abrir_menu(self, botao, menu):
         menu.tk_popup(botao.winfo_rootx(), botao.winfo_rooty() + botao.winfo_height() + 4)
 
-    def menu_bases(self):
-        return self._menu([(NOMES_BASE['LI'], self.importar_li),
-                           (NOMES_BASE['LI_ITENS'], lambda: self.importar_base('LI_ITENS')),
-                           (NOMES_BASE['LI_MALHAS'], lambda: self.importar_base('LI_MALHAS'))])
-
     def menu_importar(self):
-        """Atualizações da FIC."""
-        return self._menu([(t, lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_FIC])
+        """Base SOP / SSOP e atualizações da FIC."""
+        return self._menu([('SOP / SSOP', self.importar_li), None]
+                          + [(t, lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_FIC])
 
     def menu_banco(self):
         return self._menu([('Abrir ou criar banco de dados…', self.escolher_banco),
-                           ('Salvar cópia de segurança do banco…', self.backup), None,
-                           ('Exportar planilhas-modelo (FVM, CCM, TAP, TTAS)…', self.exportar_modelos)])
+                           ('Salvar cópia de segurança do banco…', self.backup)])
 
     def _montar(self):
         lateral = ctk.CTkFrame(self, width=244, fg_color=tema.SUPERFICIE, corner_radius=0)
@@ -345,9 +340,6 @@ class App(ctk.CTk):
         self.btn_importar = botao_pri(topo, 'Importar atualização', 'importar', None, height=34)
         self.btn_importar.configure(command=lambda: self._abrir_menu(self.btn_importar, self.menu_importar()))
         self.btn_importar.pack(side='right', padx=8)
-        self.btn_bases = botao_sec(topo, 'Importar base', 'banco', None, height=34)
-        self.btn_bases.configure(command=lambda: self._abrir_menu(self.btn_bases, self.menu_bases()))
-        self.btn_bases.pack(side='right')
         self.chip_data = ctk.CTkLabel(topo, text='', image=icone('calendario', tema.TEXTO_2), compound='left', height=34,
                                       corner_radius=tema.RAIO_BOTAO, fg_color=tema.AFUNDADO, text_color=tema.TEXTO,
                                       font=tema.cfonte(12, tipo='dado'), padx=10)
@@ -364,7 +356,7 @@ class App(ctk.CTk):
         self.paginas = {}
         for nome, montar in (('Visão Gerencial', self._pg_visao), ('FVI', self._pg_fvi), ('FVM', self._pg_fvm),
                              ('CCM', lambda f: self._pg_doc(f, 'CCM', rotulos.COL_CCM, R_SSOP, 'txt_ccm_status')),
-                             ('TAP', lambda f: self._pg_doc(f, 'TAP', rotulos.COL_TAP, R_SSOP, 'txt_tap_status')),
+                             ('TAP', lambda f: self._pg_doc(f, 'TAP', rotulos.COL_TAP, R_SOP, 'txt_tap_status')),
                              ('TTAS', lambda f: self._pg_doc(f, 'TTAS', rotulos.COL_TTAS, R_SOP, 'txt_ttas_status')),
                              ('Verificação', self._pg_verificacao), ('Histórico', self._pg_historico),
                              ('Importações', self._pg_importacoes), ('Critérios', self._pg_criterios)):
@@ -475,9 +467,9 @@ class App(ctk.CTk):
     def _pg_fvm(self, f):
         d = self.fvm = {'nome': 'FVM', 'ident': 'malha', 'dica_busca': 'Buscar malha'}
         self._filtros(f, d)
-        nota(f, 'Status como vem da FIC. Uma malha pode, mas não deve, pertencer a mais de uma SSOP: nesse caso ela aparece '
-                'uma vez em cada SSOP, com a linha em cinza, e entra na página Verificação. Layout da planilha de FVM '
-                'ainda provisório: MALHA | SOP | SSOP | STATUS.').pack(
+        nota(f, 'Status da malha como vem da FIC (Relatório de Hierarquia de Malhas); a SSOP vem das TAG/linhas da malha. '
+                'Uma malha pode, mas não deve, pertencer a mais de uma SSOP: nesse caso ela aparece uma vez em cada SSOP, '
+                'com a linha em cinza, e entra na página Verificação.').pack(
             side='bottom', fill='x', pady=(8, 0))
         d['tabela'] = Tabela(f, rotulos.COL_MALHAS)
         d['tabela'].pack(fill='both', expand=True)
@@ -585,7 +577,7 @@ class App(ctk.CTk):
         configuracao.lembrar_banco(caminho)
         self.atualizar()
         if not self.banco.tem_base():
-            self.status_msg('Banco novo: comece por Importar base ▸ LI de SOP / SSOP.')
+            self.status_msg('Banco novo: comece por Importar atualização ▸ SOP / SSOP.')
 
     def escolher_banco(self):
         p = filedialog.asksaveasfilename(title='Abrir ou criar banco de dados', defaultextension='.db',
@@ -622,31 +614,22 @@ class App(ctk.CTk):
         return r if r is not None else True
 
     def importar_li(self):
-        p = filedialog.askopenfilename(title='Selecione a LI (lista de SOP e SSOP)', filetypes=XLSX)
+        p = filedialog.askopenfilename(title='Selecione a lista de SOP / SSOP (Lista de Cadastros Básicos da FIC)',
+                                       filetypes=XLSX)
         if not p:
             return
         if self.banco.tem_base() and not messagebox.askyesno(
-                'Substituir base', 'A base de SOP e SSOP atual será substituída pela desta LI. Continuar?'):
+                'Substituir base', 'A base de SOP e SSOP atual será substituída pela deste arquivo. Continuar?'):
             return
         msg = self._executar(lambda: servico.importar_li(self.banco, p))
         if msg:
             self.atualizar()
             self.status_msg(msg)
-            messagebox.showinfo('LI importada', msg)
-
-    def importar_base(self, tipo):
-        p = filedialog.askopenfilename(title=f'Selecione a {NOMES_BASE[tipo]}', filetypes=XLSX)
-        if not p:
-            return
-        msg = self._executar(lambda: servico.importar_base(self.banco, tipo, p))
-        if msg:
-            self.atualizar()
-            self.status_msg(msg)
-            messagebox.showinfo(f'{NOMES_BASE[tipo]} importada', msg + '\nConferências na página Verificação.')
+            messagebox.showinfo('SOP / SSOP importada', msg)
 
     def importar_fic(self, tipo):
         if not self.banco.tem_base():
-            messagebox.showwarning('Base ausente', 'Importe primeiro a base (Importar base ▸ LI de SOP / SSOP).')
+            messagebox.showwarning('Base ausente', 'Importe primeiro a lista de SOP / SSOP (Importar atualização ▸ SOP / SSOP).')
             return
         p = filedialog.askopenfilename(title=f'Selecione o arquivo de {servico.NOMES[tipo]}', filetypes=XLSX)
         if not p:
@@ -704,12 +687,6 @@ class App(ctk.CTk):
             self.banco.incluir_sem_fvi, self.banco.status_fic()), f'Relatório exportado: {p}')
         if ok and messagebox.askyesno('Relatório exportado', f'Arquivo salvo:\n{p}\n\nAbrir agora?'):
             abrir_arquivo(p)
-
-    def exportar_modelos(self):
-        p = filedialog.asksaveasfilename(title='Exportar planilhas-modelo', defaultextension='.xlsx',
-                                         initialfile='MODELOS_IMPORTACAO_EPC12.xlsx', filetypes=[('Planilha Excel', '*.xlsx')])
-        if p:
-            self._executar(lambda: exportacao.exportar_modelos(p), f'Modelos salvos em {p}')
 
     # ------------------------------------------------------------------ histórico e critérios
     def registrar_historico(self):
@@ -820,9 +797,11 @@ class App(ctk.CTk):
         fontes = {
             'FVI': ([t[campo_fvi[escolha]] for t in R.tags if na_unidade(t)], 'TAGs',
                     f'{"Status FVI" if escolha == "Status FVI" else "FVI " + escolha} por TAG'),
-            'FVM': ([m['status'] for m in R.malhas if na_unidade(m)], 'malhas', 'Status da FVM por malha'),
+            # malha em mais de uma SSOP conta uma vez na pizza
+            'FVM': (list({m['malha']: m['status'] for m in R.malhas if na_unidade(m)}.values()), 'malhas',
+                    'Status da malha'),
             'CCM': ([s['txt_ccm_status'] for s in R.ssop if na_unidade(s)], 'SSOP', 'Status do CCM por SSOP'),
-            'TAP': ([s['txt_tap_status'] for s in R.ssop if na_unidade(s)], 'SSOP', 'Status do TAP por SSOP'),
+            'TAP': ([s['txt_tap_status'] for s in R.sop if na_unidade(s)], 'SOP', 'Status do TAP por SOP'),
             'TTAS': ([s['txt_ttas_status'] for s in R.sop if na_unidade(s)], 'SOP', 'Status do TTAS por SOP'),
         }
         for doc, (valores, unidade, sub) in fontes.items():
@@ -943,11 +922,9 @@ class App(ctk.CTk):
 
     def ajuda(self):
         messagebox.showinfo('Como usar', (
-            '1. Importar base ▸ LI de SOP / SSOP (uma vez, ou quando a LI for revisada).\n'
-            '   LI de Itens e LI de Malhas: TAG/malha → SSOP, conferidas com a FIC na página Verificação.\n'
-            '2. Importar atualização ▸ FVI: o Relatório de Cadastro Geral exportado da FIC, sem editar.\n'
-            '   FVM, CCM, TAP e TTAS: planilhas com cabeçalho reconhecido pelo nome das colunas\n'
-            '   (Banco de dados ▸ Exportar planilhas-modelo mostra o formato).\n'
+            '1. Importar atualização ▸ SOP / SSOP: a Lista de Cadastros Básicos da FIC (uma vez, ou quando mudar).\n'
+            '2. Importar atualização ▸ FVI (Relatório de Cadastro Geral), FVM (Relatório de Hierarquia de Malhas),\n'
+            '   CCM, TAP e TTAS (listas da FIC): os arquivos exportados da FIC, sem editar.\n'
             '3. Confirme a data de referência: o avanço fica registrado no Histórico nessa data.\n'
             '4. Confira a página Verificação (os testes devem resultar OK) antes de apresentar.\n'
             '5. Exportar Excel gera a planilha gerencial para envio, com as mesmas páginas e gráficos.\n\n'

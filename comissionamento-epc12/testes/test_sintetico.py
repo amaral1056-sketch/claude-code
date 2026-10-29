@@ -22,7 +22,7 @@ def carregar(banco, tmp_path):
     d = '28/10/2026'
     servico.importar_fic(banco, 'FVM', f.provisorio(tmp_path / 'fvm.xlsx', ['MALHA', 'SOP', 'SSOP', 'STATUS'], f.FVM_SINTETICO), d)
     servico.importar_fic(banco, 'CCM', f.provisorio(tmp_path / 'ccm.xlsx', ['Nº CCM', 'SSOP', 'STATUS'], f.CCM_SINTETICO), d)
-    servico.importar_fic(banco, 'TAP', f.provisorio(tmp_path / 'tap.xlsx', ['Nº TAP', 'SSOP', 'STATUS'], f.TAP_SINTETICO), d)
+    servico.importar_fic(banco, 'TAP', f.provisorio(tmp_path / 'tap.xlsx', f.CABECALHO_TAP, f.TAP_SINTETICO), d)
     servico.importar_fic(banco, 'TTAS', f.provisorio(tmp_path / 'ttas.xlsx', ['Nº TTAS', 'SOP', 'STATUS'], f.TTAS_SINTETICO), d)
     return servico.calcular(banco)
 
@@ -67,9 +67,13 @@ def test_ccm_cancelado_mais_revisao_concluida(banco, tmp_path):
     assert linha(R.ssop, 'ssop', f.S3)['ccm_situacao'] == 'SEM REGISTRO'
 
 
-def test_tap(banco, tmp_path):
+def test_tap_por_sop_pelo_numero(banco, tmp_path):
     R = carregar(banco, tmp_path)
-    assert valores(linha(R.ssop, 'ssop', f.S1), ('tap_reg', 'tap_concluido', 'tap_situacao')) == (1, 1, 'CONCLUÍDO')
+    ch = ('tap_reg', 'tap_concluido', 'tap_situacao', 'tap_status')
+    assert valores(linha(R.sop, 'sop', f.P1), ch) == (1, 1, 'CONCLUÍDO', 'TAP CONCLUIDO')
+    assert valores(linha(R.sop, 'sop', f.P2), ch) == (2, 0, 'EM ANDAMENTO', 'XYZ')   # último válido do arquivo
+    assert linha(R.sop, 'sop', f.P3)['tap_situacao'] == 'SEM REGISTRO'
+    assert (R.total['tap'], R.total['pct_tap']) == (1, pytest.approx(1 / 3))           # SOP com TAP ÷ SOP
 
 
 def test_ttas_registro_unico_que_avanca(banco, tmp_path):
@@ -137,7 +141,7 @@ def test_criterio_editado_muda_o_resultado(banco, tmp_path):
 
 def test_fic_sem_li_recusada(tmp_path):
     b = Banco(tmp_path / 'vazio.db')
-    with pytest.raises(ErroImportacao, match='LI'):
+    with pytest.raises(ErroImportacao, match='SOP / SSOP'):
         servico.importar_fic(b, 'FVI', f.cadastro(tmp_path / 'c.xlsx', f.TAGS_SINTETICAS))
     assert b.dados('FVI') == []
     b.fechar()

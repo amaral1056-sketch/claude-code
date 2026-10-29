@@ -47,7 +47,7 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
 
     escolher(monkeypatch, f.li(tmp_path / 'li.xlsx'))
     app.importar_li()
-    assert app.msgs[-1][1] == 'LI importada'
+    assert app.msgs[-1][1] == 'SOP / SSOP importada'
 
     escolher(monkeypatch, f.cadastro(tmp_path / 'cad.xlsx', f.TAGS_SINTETICAS))
     app.importar_fic('FVI')
@@ -103,7 +103,7 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
     fvm = f.FVM_SINTETICO + [('M6', f.P1, f.S1, 'ACAMPO5'), ('M6', f.P2, f.S2, 'ACAMPO5')]
     escolher(monkeypatch, f.provisorio(tmp_path / 'fvm.xlsx', ['MALHA', 'SOP', 'SSOP', 'STATUS'], fvm), '28/10/2026')
     app.importar_fic('FVM')
-    assert [c[0] for c in gui.rotulos.COL_MALHAS] == ['Malha', 'SSOP', 'Status da FVM']
+    assert [c[0] for c in gui.rotulos.COL_MALHAS] == ['Malha', 'SSOP', 'Status da malha']
     malhas = {(m['malha'], m['ssop']): m for m in app.fvm['tabela'].linhas}
     assert (malhas[('M1', f.S1)]['status'], malhas[('M3', f.S1)]['status'], malhas[('M4', f.S1)]['status']) == (
         'ACAMPO5', 'AAPRV3E4FIS', 'CANCEL')
@@ -187,19 +187,21 @@ def test_visao_gerencial_pizzas(app, tmp_path, monkeypatch):
 
 
 def test_menus_de_importacao_e_logo(app):
-    m = app.menu_bases()
-    assert [m.entrycget(i, 'label') for i in range(m.index('end') + 1)] == ['LI de SOP / SSOP', 'LI de Itens', 'LI de Malhas']
+    assert not hasattr(app, 'btn_bases')                                            # só o botão de atualização
     m = app.menu_importar()
-    assert [m.entrycget(i, 'label') for i in range(m.index('end') + 1)] == ['FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
+    rotulos_menu = [m.entrycget(i, 'label') for i in range(m.index('end') + 1) if m.type(i) == 'command']
+    assert rotulos_menu == ['SOP / SSOP', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
     assert app.logo.cget('image') is not None and app.logo.cget('text') == ''       # logo embutida, não o quadrado
 
 
-def test_importar_li_de_itens_pela_tela(app, tmp_path, monkeypatch):
-    carregar_fvi(app, tmp_path, monkeypatch)
-    escolher(monkeypatch, f.provisorio(tmp_path / 'itens.xlsx', ['TAG', 'SOP', 'SSOP', 'DESCRIÇÃO'],
-                                       [('T1', f.P1, f.S1, 'X'), ('TX', f.P1, f.S1, 'Y')]))
-    app.importar_base('LI_ITENS')
-    assert app.msgs[-1][1] == 'LI de Itens importada'
-    ver = {t: a for _, t, _, a, _ in app.R.verificacao}
-    assert ver['LI de Itens – registros lidos'] == 2
-    assert app.t_imp.linhas[0]['tipo'] == 'LI_ITENS'
+def test_modelos_da_fic_pela_tela(app, tmp_path, monkeypatch):
+    escolher(monkeypatch, f.cadastros_basicos(tmp_path / 'b.xlsx', f.BASICOS))
+    app.importar_li()
+    assert app.msgs[-1][1] == 'SOP / SSOP importada'
+    escolher(monkeypatch, f.hierarquia_malhas(tmp_path / 'fvm.xlsx', [
+        ('M1', 'OPERAÇÃO', [('TAG', 'T1', f.S1, f.P1)]),
+        ('M2', 'PRONTO', [('TAG', 'T2', f.S1, f.P1), ('TAG', 'T3', f.S2, f.P2)])]))
+    app.importar_fic('FVM')
+    assert len(app.fvm['tabela'].linhas) == 3                  # tabela: uma linha por malha e SSOP
+    assert '2 malhas' in app.sub_pizza['FVM'].cget('text')     # pizza: cada malha uma vez
+    assert sorted((r, n) for r, n, _, _ in app.pizzas['FVM'].fatias) == [('OPERAÇÃO', 1), ('PRONTO', 1)]

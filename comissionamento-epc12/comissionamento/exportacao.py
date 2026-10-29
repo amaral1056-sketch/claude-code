@@ -1,4 +1,4 @@
-"""Exportação para Excel: relatório gerencial (mesma organização e nomes da tela) e planilhas-modelo de importação."""
+"""Exportação para Excel: relatório gerencial (mesma organização e nomes da tela)."""
 import datetime
 
 from openpyxl import Workbook
@@ -12,7 +12,6 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter as L
 
 from . import rotulos, tema
-from .importacao import CABECALHO_MODELO
 from .rotulos import COL_VISAO, NOTAS_VISAO
 
 # identidade HUD monocromática; no Excel, fontes presentes em qualquer Windows: Bahnschrift (títulos) e Consolas (dados)
@@ -116,9 +115,9 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
     # distribuição dos status da FIC (geral) em aba própria; as pizzas leem dela
     dados = wb.create_sheet('Dados dos gráficos')
     fontes = (('FVI', 'Status FVI por TAG', [t['st_fvi'] for t in R.tags]),
-              ('FVM', 'Status da FVM por malha', [m['status'] for m in R.malhas]),
+              ('FVM', 'Status da malha', list({m['malha']: m['status'] for m in R.malhas}.values())),
               ('CCM', 'Status do CCM por SSOP', [x['txt_ccm_status'] for x in R.ssop]),
-              ('TAP', 'Status do TAP por SSOP', [x['txt_tap_status'] for x in R.ssop]),
+              ('TAP', 'Status do TAP por SOP', [x['txt_tap_status'] for x in R.sop]),
               ('TTAS', 'Status do TTAS por SOP', [x['txt_ttas_status'] for x in R.sop]))
     lin = 1
     for k, (doc, titulo, valores) in enumerate(fontes):
@@ -151,7 +150,7 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
     _realcar(ws, R.malhas, 'txt_situacao', cores, ncols=len(rotulos.COL_MALHAS_XLS))
 
     # ---------------------------------------------------------------- documentos
-    for nome, cols, linhas in (('CCM', rotulos.COL_CCM, R.ssop), ('TAP', rotulos.COL_TAP, R.ssop),
+    for nome, cols, linhas in (('CCM', rotulos.COL_CCM, R.ssop), ('TAP', rotulos.COL_TAP, R.sop),
                                ('TTAS', rotulos.COL_TTAS, R.sop)):
         _tabela(wb.create_sheet(nome), cols, linhas)
 
@@ -176,16 +175,3 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
     wb.move_sheet('Dados dos gráficos', offset=len(wb.sheetnames))
     wb.save(destino)
 
-
-def exportar_modelos(destino):
-    """Uma aba por documento com o cabeçalho que o importador reconhece (layout provisório)."""
-    wb = Workbook()
-    wb.remove(wb.active)
-    for tipo, cab in CABECALHO_MODELO.items():
-        ws = wb.create_sheet(tipo)
-        for j, t in enumerate(cab, 1):
-            c = ws.cell(1, j, t)
-            c.font, c.fill = HF, HFILL
-            ws.column_dimensions[L(j)].width = 26
-        ws.freeze_panes = 'A2'
-    wb.save(destino)

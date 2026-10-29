@@ -1,7 +1,7 @@
 """Banco de dados SQLite do programa (um único arquivo .db).
 
 Conteúdo:
-- base mestre da LI (unidades, SOP, SSOP);
+- base mestre SOP / SSOP (unidades, SOP, SSOP) e os avisos da sua importação;
 - dados importados das exportações da FIC (cadastro FVI, FVM, CCM, TAP, TTAS) – cada importação substitui a anterior
   do mesmo tipo, porque as exportações da FIC são sempre a lista completa;
 - critérios de "aprovado", listas oficiais de status e parâmetros (editáveis);
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import padroes
 
-VERSAO_ESQUEMA = 1
+VERSAO_ESQUEMA = 2   # 2: TAP por SOP; sem LI de Itens / LI de Malhas
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT);
@@ -33,10 +33,8 @@ CREATE TABLE IF NOT EXISTS fvi_tag (
     dados TEXT);
 CREATE TABLE IF NOT EXISTS fvm (linha INTEGER PRIMARY KEY, malha TEXT, sop TEXT, ssop TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS ccm (linha INTEGER PRIMARY KEY, numero TEXT, ssop TEXT, status TEXT);
-CREATE TABLE IF NOT EXISTS tap (linha INTEGER PRIMARY KEY, numero TEXT, ssop TEXT, status TEXT);
+CREATE TABLE IF NOT EXISTS tap (linha INTEGER PRIMARY KEY, numero TEXT, sop TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS ttas (linha INTEGER PRIMARY KEY, numero TEXT, sop TEXT, status TEXT);
-CREATE TABLE IF NOT EXISTS li_item (linha INTEGER PRIMARY KEY, tag TEXT, sop TEXT, ssop TEXT, descricao TEXT);
-CREATE TABLE IF NOT EXISTS li_malha (linha INTEGER PRIMARY KEY, malha TEXT, sop TEXT, ssop TEXT, descricao TEXT);
 CREATE TABLE IF NOT EXISTS criterio (
     id INTEGER PRIMARY KEY AUTOINCREMENT, etapa TEXT NOT NULL, codigo TEXT NOT NULL, origem TEXT,
     UNIQUE (etapa, codigo));
@@ -50,8 +48,7 @@ CREATE TABLE IF NOT EXISTS historico (
     PRIMARY KEY (data_referencia, unidade));
 """
 
-TABELAS_IMPORTACAO = {'FVI': 'fvi_tag', 'FVM': 'fvm', 'CCM': 'ccm', 'TAP': 'tap', 'TTAS': 'ttas',
-                      'LI_ITENS': 'li_item', 'LI_MALHAS': 'li_malha'}
+TABELAS_IMPORTACAO = {'FVI': 'fvi_tag', 'FVM': 'fvm', 'CCM': 'ccm', 'TAP': 'tap', 'TTAS': 'ttas'}
 TIPOS_FIC = ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')
 COLUNAS_HISTORICO = ('sop', 'ssop', 'tags', 'cii_aplic', 'cii_aprov', 'ciii_aplic', 'ciii_aprov', 'cv_aplic',
                      'cv_aprov', 'malhas', 'fvm_ciii', 'fvm_cv', 'ccm', 'tap', 'ttas1', 'ttas2', 'tags_sem_fvi')
@@ -76,6 +73,7 @@ class Banco:
     # ------------------------------------------------------------------ criação
     def _preparar(self):
         with self.con:
+            self._migrar()
             self.con.executescript(ESQUEMA)
             if self.meta('versao_esquema') is None:
                 self.definir_meta('versao_esquema', str(VERSAO_ESQUEMA))
@@ -83,6 +81,21 @@ class Banco:
                 self.definir_meta('incluir_sem_fvi', 'SIM')
                 self._criterios_padrao()
                 self._status_padrao()
+
+    def _migrar(self):
+        """Esquema 1 -> 2: o TAP passou a ser por SOP (a lista da FIC numera o TAP pelo SOP). A tabela antiga, por
+        SSOP, é descartada: basta importar o TAP de novo. LI de Itens / LI de Malhas deixaram de existir."""
+        cols = [r[1] for r in self.con.execute('PRAGMA table_info(tap)')]
+        if cols and 'sop' not in cols:
+            self.con.execute('DROP TABLE tap')
+        self.con.execute('DROP TABLE IF EXISTS li_item')
+        self.con.execute('DROP TABLE IF EXISTS li_malha')
+        if self.meta_existe():
+            self.definir_meta('versao_esquema', str(VERSAO_ESQUEMA))
+
+    def meta_existe(self):
+        return self.con.execute("SELECT 1 FROM sqlite_master WHERE name = 'meta'").fetchone() is not None and \
+            self.meta('versao_esquema') is not None
 
     def _criterios_padrao(self):
         self.con.execute('DELETE FROM criterio')
@@ -140,12 +153,16 @@ class Banco:
     def tem_base(self):
         return self.con.execute('SELECT COUNT(*) FROM ssop').fetchone()[0] > 0
 
-    def substituir_base(self, linhas, arquivo):
-        """linhas: dicts com item, unidade, sop, descricao_sop, ssop, descricao_ssop, documentos, grupo (ordem da LI)."""
-        unidades = list(dict.fromkeys(r['unidade'] for r in linhas))
+    def substituir_base(self, linhas, arquivo, sops_lista=None, avisos=()):
+        """linhas: dicts com item, unidade, sop, descricao_sop, ssop, descricao_ssop, documentos, grupo (ordem da base).
+        sops_lista: SOPs em ordem (dicts sop, unidade, descricao, grupo) – inclui SOP sem SSOP; sem ela, sai das linhas.
+        avisos: [(código, problema)] da importação, mostrados na Verificação."""
         sops = {}
+        for r in sops_lista or []:
+            sops[r['sop']] = {'unidade': r['unidade'], 'descricao_sop': r['descricao'], 'grupo': r['grupo']}
         for r in linhas:
             sops.setdefault(r['sop'], r)
+        unidades = list(dict.fromkeys([r['unidade'] for r in sops.values()] + [r['unidade'] for r in linhas]))
         with self.con:
             self.con.execute('DELETE FROM ssop')
             self.con.execute('DELETE FROM sop')
@@ -156,8 +173,13 @@ class Banco:
             self.con.executemany('INSERT INTO ssop VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                                  [(r['ssop'], r['item'], r['unidade'], r['sop'], r['descricao_ssop'], r['documentos'],
                                    r['grupo'], i) for i, r in enumerate(linhas)])
+            self.definir_meta('avisos_base', json.dumps(list(avisos), ensure_ascii=False))
             self._registrar('LI', arquivo, None, len(linhas),
-                            f'{len(unidades)} unidades, {len(sops)} SOP, {len(linhas)} SSOP')
+                            f'{len(unidades)} unidades, {len(sops)} SOP, {len(linhas)} SSOP'
+                            + (f', {len(avisos)} aviso(s)' if avisos else ''))
+
+    def avisos_base(self):
+        return [tuple(a) for a in json.loads(self.meta('avisos_base', '[]'))]
 
     def base(self):
         """(unidades em ordem, lista de SOP, lista de SSOP) como dicts."""

@@ -19,11 +19,12 @@ main.py                      entrada: sem argumentos abre a interface; com --li/
 comissionamento/texto.py     TRIM e comparação sem caixa (equivalentes ao Excel)
 comissionamento/padroes.py   critérios padrão e listas oficiais de status (semeiam o banco novo)
 comissionamento/banco.py     esquema SQLite, critérios, parâmetros, log de importações, histórico, backup
-comissionamento/importacao.py leitura da LI, do Relatório de Cadastro Geral e dos layouts provisórios (FVM/CCM/TAP/TTAS)
+comissionamento/importacao.py leitura das exportações da FIC: Cadastros Básicos (SOP/SSOP; LI antiga também), Cadastro Geral
+                             (FVI), Hierarquia de Malhas (FVM), listas de CCM, TAP e TTAS
 comissionamento/calculo.py   reprodução das fórmulas da planilha (IMP_* auxiliares, abas por SSOP/SOP, visão, verificação)
 comissionamento/servico.py   importar -> gravar -> recalcular -> histórico
-comissionamento/exportacao.py relatório Excel (valores formatados) e planilhas-modelo
-comissionamento/gui.py       interface CustomTkinter: barra lateral com logo, botões Importar base / Importar atualização,
+comissionamento/exportacao.py relatório Excel (valores formatados)
+comissionamento/gui.py       interface CustomTkinter: barra lateral com logo, botão Importar atualização (SOP/SSOP + FIC),
                              Visão Gerencial (5 pizzas de status da FIC: FVI, FVM, CCM, TAP, TTAS – geral ou por unidade),
                              FVI TAG a TAG, FVM malha a malha, CCM/TAP/TTAS (status da FIC), Verificação, Histórico,
                              Importações, Critérios. Filtros: Unidade → SOP → SSOP em cascata + TAG/malha ou situação
@@ -33,24 +34,33 @@ comissionamento/tema.py      identidade HUD monocromática (tokens hud-mono-ligh
 comissionamento/icones.py    ícones de linha padronizados (Pillow, 4x e reduzidos), recurso() e logo()
 comissionamento/graficos.py  gráficos em tk.Canvas: Pizza (Pillow 4x, cinzas + texturas) e linhas, com dica ao passar o mouse
 ferramentas/fonte_display.py gera EPC12 Display (Orbitron com o til redesenhado; nome trocado por exigência da OFL)
-testes/                      sintético (12 casos de borda à mão), importação, interface, dados reais (pulado sem dados/)
+testes/                      sintético (12 casos de borda à mão), importação, layouts da FIC, interface, dados reais (pulado sem dados/)
 ci/teste_exe.py              testa o .exe gerado; .github/workflows/comissionamento-windows.yml gera o .exe no Windows
 ```
 Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use `xvfb-run`).
 
 ## Regras de negócio (vindas da planilha – não mudar sem evidência)
-- Base mestre = LI (aba LISTA). Chave = SSOP. Checagens da LI (SSOP único, prefixo "S"+SOP, unidade = código, ITEM 1..n) param a importação.
-- Granularidade: FVI TAGs por SSOP e SOP · FVM malhas por SSOP e SOP · CCM e TAP por SSOP · TTAS1/TTAS2 por SOP · Visão por unidade.
+- Base mestre = lista SOP / SSOP. Modelo (29/10): Lista de Cadastros Básicos da FIC (Código, Descrição, Tipo SOP/SSOP), sem
+  coluna de unidade: unidade e SOP da SSOP vêm do código (SSOP-<unidade>-<grupo>-<nº>-<seq>). Código duplicado, tipo
+  inválido ou código sem unidade param a importação; SSOP cujo SOP não está na lista (SOP incluído sem descrição, A CONFIRMAR)
+  e código de SSOP sem "SSOP-" viram avisos na Verificação. A LI antiga (aba LISTA) segue aceita com as checagens da
+  planilha (SSOP único, prefixo "S"+SOP, unidade = código, ITEM 1..n) – é ela que o teste de dados reais usa.
+- Granularidade: FVI TAGs por SSOP e SOP · FVM malhas por SSOP e SOP · CCM por SSOP · TAP e TTAS1/TTAS2 por SOP · Visão por unidade.
+  TAP por SOP (mudou em 29/10 pela lista da FIC: Número do TAP = "TAP-" + SOP, 14 TAP = 14 SOP); sem coluna SOP, vem do número.
 - Cadastro FVI: linha de dado = TAG (A) e CONTRATO (AC) preenchidos e TAG ≠ "TAG". Layout validado pelos nomes das colunas-chave
   (A TAG, D SOP, E SSOP, F CLASSE, AC CONTRATO, AE Nº FVI, AJ..AN STATUS FVI/CAMPO II/III/IV/V); se mudar, para.
 - Cancelados (etapa CANCELADO) fora de todas as contas; no FVI cancelamento verificado em AJ, AK, AL e AN.
 - FVI: "N/A" tira a TAG do denominador do campo; status vazio = aplicável e não aprovado. TAGs sem FVI no denominador
   conforme parâmetro (SIM padrão). TAGs sem SSOP não contam avanço. Campo IV não é acompanhado (aviso se aparecer).
 - TTAS é registro único por SOP que avança: TTAS1 aprovado inclui estágios posteriores; TTAS2 = APROVADO/TTASCONCLUIDO.
-- % = aprovados ÷ aplicáveis; % CCM/TAP por SSOP; % TTAS por SOP; totais ponderados (não média de %).
+- % = aprovados ÷ aplicáveis; % CCM por SSOP; % TAP e TTAS por SOP; totais ponderados (não média de %).
 - Comparações como no Excel: TRIM (só espaço) e sem diferença de maiúsculas.
-- Diferenças deliberadas em relação à planilha: FVM/CCM/TAP/TTAS ignoram linhas sem SSOP/SOP **e** sem status (rodapé) e
-  contam "registros sem SSOP" à parte; colunas são achadas pelo nome. Sem limites de linhas (a planilha tinha 10.000 no FVI).
+- Diferenças deliberadas em relação à planilha: CCM/TAP/TTAS ignoram linhas sem SSOP/SOP **e** sem status (rodapé); linha
+  sem número só vale com SSOP/SOP E status (CCMOCULTO); colunas são achadas pelo nome. Sem limites de linhas.
+- FVM = Relatório de Hierarquia de Malhas: linhas MALHA (status da malha) seguidas das TAG/LINHA (com SSOP/SOP; "-" = vazio).
+  Um registro por malha e SSOP. Esse arquivo NÃO traz status de FVM (traz OPERAÇÃO/PRONTO, status do item) – por isso o
+  avanço FVM Campo III/V dá 0 e "código desconhecido" = nº de registros até o usuário definir a regra (pendência 9).
+  Na pizza da Visão cada malha conta uma vez; na tabela, uma linha por SSOP.
 - Textos ao usuário sempre por extenso ("FVI Campo II", "FVM Campo III", "TTAS 1"), definidos em rotulos.py e
   usados igualmente na tela e no Excel. Ícones só do conjunto de icones.py (mesmo traço).
 - ci/teste_exe.py abre o .exe por linha de comando E a interface (variável EPC12_TESTE_INICIO); não remover.
@@ -61,12 +71,12 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
   (com uma só, o título identifica).
 - Layout das telas definido pelo usuário (29/10): Visão Gerencial = pizzas FVI, FVM, CCM, TAP, TTAS (nesta ordem, caixas
   iguais); páginas de acompanhamento mostram o STATUS DA FIC como vem no arquivo (o avanço % continua pelos Critérios);
-  FVI/FVM sem coluna Situação; TTAS com "Situação TTAS 1/2"; Importar base = LI de SOP/SSOP, LI de Itens, LI de Malhas;
-  Importar atualização = FVI, FVM, CCM, TAP, TTAS.
+  FVI/FVM sem coluna Situação; TTAS com "Situação TTAS 1/2". Em 29/10 (2ª): botão Importar base removido; um só botão
+  Importar atualização = SOP / SSOP, FVI, FVM, CCM, TAP, TTAS. LI de Itens / LI de Malhas e planilhas-modelo removidas.
 - Status exibido por SSOP/SOP (CCM, TAP, TTAS): registro aprovado > último válido do arquivo > cancelado > "Sem registro".
   TTAS: status de etapa 2 (TTAS1 sem TTAS1APROVADO, ou TTAS2) ⇒ coluna TTAS 1 = TTAS1APROVADO (inferência, a confirmar).
 - FVM: uma malha PODE, mas NÃO DEVE, pertencer a mais de uma SSOP – conta em cada SSOP, é destacada e vai para a
-  Verificação (teste que deve dar 0). O mesmo teste vale para a LI de Malhas.
+  Verificação (teste que deve dar 0).
 - Estilo das pizzas: tema.cores_pizza devolve (tipo, cor) – 4 cinzas sólidos e depois texturas (hachura, pontos, cruzado, linhas)
   seguindo o código na lista oficial; N/A hachura clara, sem status/registro branco, Outros grade; tela e Excel iguais (pattFill).
 - Banco: cada importação substitui a anterior do tipo; o histórico guarda contagens por unidade por data de referência.
@@ -78,5 +88,8 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 4. Parâmetro de TAGs sem FVI no denominador: SIM ou NÃO – qual a gerência usa?
 5. Templates FVI/FVM/Preservação ainda não foram trazidos para o programa (continuam na planilha).
 6. TAGS SEM FVI por SSOP soma também TAGs canceladas (como a planilha); hoje não há TAG cancelada, sem efeito – confirmar a regra.
-7. Layouts reais de FVM, CCM, TAP, TTAS, LI de Itens e LI de Malhas: ajustar `COLUNAS_PROVISORIAS` quando chegarem.
-8. LI de Itens / LI de Malhas: hoje só conferidas na Verificação. Devem também alimentar o avanço (ex.: denominador)?
+7. Modelos da FIC recebidos em 29/10 (SOP/SSOP, FVI, FVM, CCM, TAP, TTAS) – leitores ajustados e testados com eles.
+8. SOP / SSOP com status PRONTO (11 SSOP no modelo, exatamente as sem CCM): entram no denominador? Hoje entram.
+9. FVM: o Relatório de Hierarquia de Malhas não tem status de FVM (Campo III/V). De onde vem o avanço da FVM?
+10. 5 SSOP do modelo têm SOP fora da lista (incluídos sem descrição) e diluem o % de TAP/TTAS (14 de 19 SOP) – confirmar.
+11. CCMOCULTO: 3 registros com SSOP fora da lista de SOP / SSOP – SSOP removidas ou faltando na lista?

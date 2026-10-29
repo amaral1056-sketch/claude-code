@@ -81,5 +81,38 @@ TAGS_SINTETICAS = [
 FVM_SINTETICO = [('M1', P1, S1, 'ACAMPO5'), ('M2', P1, S1, 'APROVADO'), ('M3', P1, S1, 'AAPRV3E4FIS'),
                  ('M4', P1, S1, 'CANCEL'), ('M5', P1, S1, 'LIBTFUNC')]
 CCM_SINTETICO = [('C1', S1, 'CANCELADO'), ('C1R1', S1, 'CCMCONCLUIDO'), ('C2', S2, 'AGAPROVA')]
-TAP_SINTETICO = [('TAP1', S1, 'TAP CONCLUIDO'), ('TAP2', S2, 'TAP1APROVCQ'), ('TAP3', S2, 'XYZ')]
+# TAP por SOP, como a lista da FIC: Id | Número do TAP ("TAP-" + SOP) | Descrição | Status
+TAP_SINTETICO = [('1', 'TAP-' + P1, 'UTILIDADE 1', 'TAP CONCLUIDO'), ('2', 'TAP-' + P2, 'AUX 2', 'TAP1APROVCQ'),
+                 ('3', 'TAP-' + P2, 'AUX 2', 'XYZ')]
+CABECALHO_TAP = ['Id FIC', 'Número do TAP', 'Descrição', 'Status']
 TTAS_SINTETICO = [('TT1', P1, 'TTASCONCLUIDO'), ('TT2', P2, 'TTAS1APROVADO')]
+
+
+def cadastros_basicos(caminho, linhas):
+    """Lista de Cadastros Básicos da FIC (base SOP / SSOP): (Código, Descrição, Tipo)."""
+    return provisorio(caminho, ['Código', 'Descrição', 'Tipo', 'Status', 'Disciplina', 'Empreendimento'],
+                      [(c, d, t, 'OPERAÇÃO', '', 'EMPREENDIMENTO TESTE') for c, d, t in linhas])
+
+
+BASICOS = [(P1, 'UTILIDADE 1', 'SOP'), (P2, 'AUX 2', 'SOP'), (P3, 'ELÉTRICA 3', 'SOP'),
+           (S1, 'SUB 1', 'SSOP'), (S2, 'SUB 2A', 'SSOP'), (S3, 'SUB 2B', 'SSOP'), (S4, 'SUB 3', 'SSOP')]
+
+
+def hierarquia_malhas(caminho, malhas, emissao='29/10/2026'):
+    """Relatório de Hierarquia de Malhas: malhas = [(malha, status, [(TIPO, tag, SSOP, SOP), ...])]."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.cell(1, 6, 'Relatório de Hierarquia de Malhas')
+    ws.append([])
+    ws.append([])
+    ws.append(['Empreendimento:', None, None, None, None, 'EMPREENDIMENTO TESTE'])
+    ws.append([])
+    ws.append(['TIPO', 'MALHA', 'TAG/LINHAS', 'STATUS', 'DESCRIÇÃO', 'SSOP', 'SOP', 'UNIDADE', 'DISCIPLINA', 'CLASSE'])
+    for malha, status, filhos in malhas:
+        ws.append(['MALHA', malha, '-', status, 'MALHA DE TESTE', '-', '-', '-', 'INS', '-'])
+        for tipo, tag, ssop, sop in filhos:
+            ws.append([tipo, malha, tag, 'OPERAÇÃO', 'ITEM', ssop, sop, 'UNIDADE TESTE', 'INS', '(000) TESTE'])
+    ws.append(['Emissão: ', 'USUÁRIO TESTE', 'Classificação da Informação: TESTE', 'Folha: 1 de 1'])
+    ws.append([f'{emissao}  09:00:19'])
+    wb.save(caminho)
+    return caminho

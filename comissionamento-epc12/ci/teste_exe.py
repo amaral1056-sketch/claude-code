@@ -12,17 +12,19 @@ from testes import fabrica as f  # noqa: E402
 
 exe, pasta = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
 pasta.mkdir(parents=True, exist_ok=True)
-li = f.li(pasta / 'li.xlsx')
+li = f.cadastros_basicos(pasta / 'sop_ssop.xlsx', f.BASICOS)          # layouts da FIC (Lista de Cadastros Básicos)
 cad = f.cadastro(pasta / 'cad.xlsx', f.TAGS_SINTETICAS)
+fvm = f.hierarquia_malhas(pasta / 'fvm.xlsx', [('M1', 'OPERAÇÃO', [('TAG', 'T1', f.S1, f.P1)])])
 rel = pasta / 'relatorio.xlsx'
 r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db'), '--li', str(li), '--importar', 'FVI', str(cad),
-                    '--exportar', str(rel)], timeout=300)
+                    '--importar', 'FVM', str(fvm), '--exportar', str(rel)], timeout=300)
 assert r.returncode == 0, f'executável terminou com código {r.returncode}'
 wb = openpyxl.load_workbook(rel)
 assert len(wb['Visão Gerencial']._charts) == 5        # pizzas FVI, FVM, CCM, TAP e TTAS
 dg = wb['Dados dos gráficos']
 total = [dg.cell(1, 1).value, dg.cell(3, 1).value, dg.cell(3, 2).value]   # status FVI mais frequente das TAGs fictícias
 assert total == ['FVI – Status FVI por TAG', 'APROVADO', 3], total
+assert len(list(wb['FVM'].iter_rows())) == 2                   # cabeçalho + malha M1 da hierarquia
 # interface: abre a janela em modo de teste (todas as páginas) e confere que ela gravou o sinal de "ok"
 marca = pasta / 'interface_ok.txt'
 r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db')], timeout=300,

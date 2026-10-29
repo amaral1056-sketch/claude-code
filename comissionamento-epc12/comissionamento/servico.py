@@ -9,24 +9,30 @@ NOMES = {'FVI': 'Relatório de Cadastro Geral (FVI)', 'FVM': 'FVM', 'CCM': 'CCM'
 
 
 def importar_li(banco, arquivo):
-    linhas = importacao.ler_li(arquivo)
-    banco.substituir_base(linhas, arquivo)
-    un = len({r['unidade'] for r in linhas})
-    sop = len({r['sop'] for r in linhas})
-    return f'LI importada: {un} unidades, {sop} SOP, {len(linhas)} SSOP.'
+    """Base SOP / SSOP (Lista de Cadastros Básicos da FIC ou LI antiga)."""
+    linhas, sops, avisos = importacao.ler_sop_ssop(arquivo)
+    banco.substituir_base(linhas, arquivo, sops, avisos)
+    un, _, _ = banco.base()
+    n_sop = len(sops) if sops else len({r['sop'] for r in linhas})
+    msg = f'SOP / SSOP importada: {len(un)} unidade(s), {n_sop} SOP, {len(linhas)} SSOP.'
+    if avisos:
+        msg += f' {len(avisos)} aviso(s) na página Verificação.'
+    return msg
 
 
 def ler_fic(tipo, arquivo):
     """Lê e valida o arquivo sem gravar. Devolve (registros, data_de_emissão|None, info)."""
     if tipo == 'FVI':
         return importacao.ler_cadastro(arquivo)
+    if tipo == 'FVM':
+        return importacao.ler_fvm(arquivo)
     return importacao.ler_provisorio(tipo, arquivo)
 
 
 def gravar_fic(banco, tipo, arquivo, registros, data_referencia, info=None):
     """Grava os registros (substituindo a importação anterior do tipo), recalcula e registra o histórico na data."""
     if not banco.tem_base():
-        raise ErroImportacao('Importe a LI (base SOP/SSOP) antes das exportações da FIC.')
+        raise ErroImportacao('Importe primeiro a lista de SOP / SSOP (Importar atualização ▸ SOP / SSOP).')
     data_iso = _iso(data_referencia)
     obs = ''
     if info and info.get('linhas_ignoradas'):
@@ -54,16 +60,9 @@ def importar_status(banco, arquivo, tipo=None):
     return tipo, len(lista)
 
 
-def importar_base(banco, tipo, arquivo):
-    """LI de Itens / LI de Malhas: substitui a base anterior do tipo (sem data de referência nem histórico)."""
-    regs, _, info = importacao.ler_provisorio(tipo, arquivo)
-    obs = f'{len(info["linhas_ignoradas"])} linha(s) ignorada(s) (cabeçalho repetido ou rodapé)' if info['linhas_ignoradas'] else ''
-    banco.substituir_dados(tipo, regs, arquivo, None, obs)
-    return f'{importacao.NOMES_BASE[tipo]} importada: {len(regs)} registro(s).'
-
-
 def calcular(banco):
-    dados = {t: banco.dados(t) for t in TIPOS_FIC + ('LI_ITENS', 'LI_MALHAS')}
+    dados = {t: banco.dados(t) for t in TIPOS_FIC}
+    dados['AVISOS_BASE'] = banco.avisos_base()
     return calculo.calcular(banco.base(), banco.criterios(), banco.status_fic(), banco.incluir_sem_fvi, dados)
 
 
@@ -108,6 +107,6 @@ def historico_com_percentuais(banco):
                           'pct_cii': p(h['cii_aprov'], h['cii_aplic']), 'pct_ciii': p(h['ciii_aprov'], h['ciii_aplic']),
                           'pct_cv': p(h['cv_aprov'], h['cv_aplic']), 'pct_fvm_ciii': p(h['fvm_ciii'], h['malhas']),
                           'pct_fvm_cv': p(h['fvm_cv'], h['malhas']), 'pct_ccm': p(h['ccm'], h['ssop']),
-                          'pct_tap': p(h['tap'], h['ssop']), 'pct_ttas1': p(h['ttas1'], h['sop']),
+                          'pct_tap': p(h['tap'], h['sop']), 'pct_ttas1': p(h['ttas1'], h['sop']),
                           'pct_ttas2': p(h['ttas2'], h['sop'])})
     return saida

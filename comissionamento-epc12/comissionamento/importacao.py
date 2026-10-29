@@ -1,10 +1,14 @@
 """Leitura das planilhas Excel que alimentam o banco.
 
-- LI (lista SOP/SSOP): aba LISTA; as checagens da etapa 01 da planilha original continuam valendo e param a importação.
+- SOP / SSOP: "Lista de Cadastros Básicos" da FIC (Código, Descrição, Tipo SOP/SSOP). Unidade e SOP de cada SSOP vêm
+  do código; SSOP cujo SOP não está na lista e código fora do padrão vão para a Verificação (não param a importação).
+  A LI antiga (aba LISTA) continua aceita, com as checagens da etapa 01 da planilha original.
 - Relatório de Cadastro Geral da FIC (FVI): o arquivo exportado, sem edição (título, cabeçalho, dados, rodapé).
   Mesma regra de leitura da IMP_FVI: linha de dado = TAG e CONTRATO preenchidos e TAG diferente de "TAG".
-- FVM, CCM, TAP, TTAS: layout ainda provisório (não temos as exportações reais). As colunas são localizadas pelo
-  NOME do cabeçalho (ver COLUNAS_PROVISORIAS); o programa gera planilhas-modelo com esses nomes.
+- FVM: "Relatório de Hierarquia de Malhas" (linhas MALHA seguidas das TAG/LINHA da malha): a SSOP da malha vem das
+  linhas TAG/LINHA; o status é o da linha MALHA, como vem. Lista simples (MALHA, SSOP, STATUS) também é aceita.
+- CCM (por SSOP), TAP e TTAS (por SOP): listas da FIC; colunas localizadas pelo NOME do cabeçalho
+  (COLUNAS_PROVISORIAS). No TAP sem coluna SOP, o SOP vem do número ("TAP-" + SOP).
 - STATUS_*.xlsx: listas oficiais de status (código | descrição).
 Nada do texto das fontes é corrigido: só é lido e, quando há inconsistência, reportado."""
 import datetime
@@ -52,6 +56,70 @@ def data_do_rodape(linhas):
 
 # ====================================================================== LI
 COLUNAS_LI = ('ITEM', 'UNIDADE', 'SOP', 'DESCRIÇÃO SOP', 'SSOP', 'DESCRIÇÃO SSOP', 'DOCUMENTOS DE REFERÊNCIA')
+
+
+def ler_sop_ssop(arquivo):
+    """Base SOP / SSOP. Devolve (linhas por SSOP, SOPs em ordem | None, avisos [(código, problema)])."""
+    wb = _abrir(arquivo)
+    eh_li = 'LISTA' in wb.sheetnames
+    wb.close()
+    if eh_li:
+        return ler_li(arquivo), None, []
+    return ler_cadastros_basicos(arquivo)
+
+
+PADRAO_CODIGO = re.compile(r'^S?SOP-(.+?)-([A-Z]{2})-\d{4}')       # unidade e grupo (disciplina do SOP)
+PADRAO_SSOP = re.compile(r'^S?(SOP-.+?-[A-Z]{2}-\d{4})-[^-]+$')     # SOP a que a SSOP pertence
+
+
+def ler_cadastros_basicos(arquivo):
+    """Lista de Cadastros Básicos (Código | Descrição | Tipo | Status | ...)."""
+    spec = [('codigo', True, ('CODIGO',)), ('descricao', True, ('DESCRICAO',)), ('tipo', True, ('TIPO',))]
+    wb = _abrir(arquivo)
+    linhas = [tuple(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
+    wb.close()
+    i, pos = _localizar_cabecalho(linhas, spec)
+    if i is None:
+        raise ErroImportacao('Planilha de SOP / SSOP fora do formato: esperado cabeçalho com Código, Descrição e Tipo '
+                             '(Lista de Cadastros Básicos da FIC) ou a aba LISTA da LI.')
+    regs = []
+    for n, r in enumerate(linhas[i + 1:], i + 2):
+        v = {c: (texto(r[p]).strip() if p < len(r) else '') for c, p in pos.items()}
+        if v['codigo']:
+            regs.append((n, v))
+    problemas, vistos = [], set()
+    for n, v in regs:
+        if v['codigo'] in vistos:
+            problemas.append(f'linha {n}: código duplicado {v["codigo"]}')
+        vistos.add(v['codigo'])
+        if chave(v['tipo']) not in ('SOP', 'SSOP'):
+            problemas.append(f'linha {n}: tipo "{v["tipo"]}" (esperado SOP ou SSOP) em {v["codigo"]}')
+        elif not PADRAO_CODIGO.match(v['codigo']) or (chave(v['tipo']) == 'SSOP' and not PADRAO_SSOP.match(v['codigo'])):
+            problemas.append(f'linha {n}: código {v["codigo"]} fora do padrão (unidade/SOP não identificáveis)')
+    if not any(chave(v['tipo']) == 'SSOP' for _, v in regs):
+        problemas.append('nenhuma linha do tipo SSOP')
+    if problemas:
+        raise ErroImportacao('A lista de SOP / SSOP não passou nas checagens (nada foi gravado):\n- '
+                             + '\n- '.join(problemas[:30]) + ('\n…' if len(problemas) > 30 else ''))
+    sops = {}
+    for _, v in regs:
+        if chave(v['tipo']) == 'SOP':
+            m = PADRAO_CODIGO.match(v['codigo'])
+            sops[v['codigo']] = {'sop': v['codigo'], 'unidade': m.group(1), 'descricao': v['descricao'], 'grupo': m.group(2)}
+    avisos, out = [], []
+    for _, v in regs:
+        if chave(v['tipo']) != 'SSOP':
+            continue
+        sop = PADRAO_SSOP.match(v['codigo']).group(1)
+        m = PADRAO_CODIGO.match(v['codigo'])
+        if not v['codigo'].startswith('SSOP-'):
+            avisos.append((v['codigo'], f'código de SSOP não começa com "SSOP-" (SOP considerado: {sop})'))
+        if sop not in sops:
+            avisos.append((v['codigo'], f'SOP {sop} não está na lista (incluído sem descrição – A CONFIRMAR)'))
+            sops[sop] = {'sop': sop, 'unidade': m.group(1), 'descricao': '', 'grupo': m.group(2)}
+        out.append({'item': len(out) + 1, 'unidade': m.group(1), 'sop': sop, 'descricao_sop': sops[sop]['descricao'],
+                    'ssop': v['codigo'], 'descricao_ssop': v['descricao'], 'documentos': '', 'grupo': m.group(2)})
+    return out, list(sops.values()), avisos
 
 
 def ler_li(arquivo):
@@ -144,7 +212,49 @@ def ler_cadastro(arquivo):
     return regs, data_do_rodape(linhas), {'linhas_arquivo': len(linhas), 'tags': len(regs)}
 
 
-# ====================================================================== FVM, CCM, TAP, TTAS (provisórios)
+# ====================================================================== FVM: Relatório de Hierarquia de Malhas
+def ler_fvm(arquivo):
+    """Hierarquia de Malhas: um registro por malha e SSOP (a SSOP vem das TAG/LINHA da malha). Sem esse layout,
+    lê a lista simples (MALHA, SSOP, STATUS)."""
+    spec = [('tipo', True, ('TIPO',)), ('malha', True, ('MALHA',)), ('status', True, ('STATUS',)),
+            ('ssop', True, ('SSOP',)), ('sop', False, ('SOP',))]
+    wb = _abrir(arquivo)
+    linhas = [tuple(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
+    aba = wb.worksheets[0].title
+    wb.close()
+    i, pos = _localizar_cabecalho(linhas, spec)
+    if i is None:
+        return ler_provisorio('FVM', arquivo)
+
+    def val(r, c):
+        p = pos.get(c)
+        v = texto(r[p]).strip() if p is not None and p < len(r) else ''
+        return '' if v == '-' else v      # "-" = sem valor no relatório
+    malhas, ignoradas = {}, []
+    for n, r in enumerate(linhas[i + 1:], i + 2):
+        tipo, malha = chave(val(r, 'tipo')), val(r, 'malha')
+        if tipo == 'MALHA' and malha:
+            malhas.setdefault(malha, {'linha': n, 'status': val(r, 'status'), 'ssop': {}})
+            malhas[malha]['linha'], malhas[malha]['status'] = n, val(r, 'status')
+        elif tipo in ('TAG', 'LINHA') and malha:
+            m = malhas.setdefault(malha, {'linha': n, 'status': '', 'ssop': {}})
+            if val(r, 'ssop'):
+                m['ssop'].setdefault(val(r, 'ssop'), (n, val(r, 'sop')))
+        elif any(texto(x) for x in r):
+            ignoradas.append(n)           # rodapé (emissão, classificação, folha)
+    regs = []
+    for malha, m in malhas.items():
+        for ssop, (n, sop) in (m['ssop'].items() or [('', (m['linha'], ''))]):
+            regs.append({'linha': n if m['ssop'] else m['linha'], 'malha': malha, 'sop': sop, 'ssop': ssop,
+                         'status': m['status']})
+    if not regs:
+        raise ErroImportacao(f'Nenhuma malha encontrada no Relatório de Hierarquia de Malhas (aba {aba}).')
+    regs.sort(key=lambda r: r['linha'])
+    return regs, data_do_rodape(linhas), {'aba': aba, 'registros': len(regs), 'malhas': len(malhas),
+                                          'linhas_ignoradas': ignoradas}
+
+
+# ====================================================================== FVM (lista simples), CCM, TAP, TTAS
 # tipo -> [(campo no banco, obrigatório, nomes aceitos no cabeçalho)]
 COLUNAS_PROVISORIAS = {
     'FVM': [('malha', True, ('MALHA', 'Nº MALHA', 'TAG MALHA', 'TAG DA MALHA', 'Nº FVM', 'FVM')),
@@ -155,23 +265,12 @@ COLUNAS_PROVISORIAS = {
             ('ssop', True, ('SSOP',)),
             ('status', True, ('STATUS', 'STATUS CCM', 'STATUS DO CCM', 'SITUACAO'))],
     'TAP': [('numero', True, ('Nº TAP', 'TAP', 'NUMERO TAP', 'NUMERO DO TAP', 'NUMERO', 'Nº')),
-            ('ssop', True, ('SSOP',)),
+            ('sop', False, ('SOP', 'SOP/SSOP')),
             ('status', True, ('STATUS', 'STATUS TAP', 'STATUS DO TAP', 'SITUACAO'))],
     'TTAS': [('numero', True, ('Nº TTAS', 'TTAS', 'NUMERO TTAS', 'NUMERO DO TTAS', 'NUMERO', 'Nº')),
-             ('sop', True, ('SOP',)),
+             ('sop', True, ('SOP', 'SOP/SSOP')),
              ('status', True, ('STATUS', 'STATUS TTAS', 'STATUS DO TTAS', 'SITUACAO'))],
 }
-# bases complementares (layout provisório até chegarem os arquivos reais): item/malha -> SSOP
-_DESCR = ('DESCRICAO', 'DESCRICAO DO TAG', 'DESCRICAO DO ITEM', 'DESCRICAO DA MALHA')
-COLUNAS_PROVISORIAS['LI_ITENS'] = [('tag', True, ('TAG', 'Nº TAG', 'TAG DO ITEM', 'ITEM')), ('sop', False, ('SOP',)),
-                                   ('ssop', True, ('SSOP',)), ('descricao', False, _DESCR)]
-COLUNAS_PROVISORIAS['LI_MALHAS'] = [('malha', True, ('MALHA', 'Nº MALHA', 'TAG MALHA', 'TAG DA MALHA')),
-                                    ('sop', False, ('SOP',)), ('ssop', True, ('SSOP',)), ('descricao', False, _DESCR)]
-NOMES_BASE = {'LI': 'LI de SOP / SSOP', 'LI_ITENS': 'LI de Itens', 'LI_MALHAS': 'LI de Malhas'}
-# nomes do cabeçalho das planilhas-modelo geradas pelo programa
-CABECALHO_MODELO = {'FVM': ['MALHA', 'SOP', 'SSOP', 'STATUS'], 'CCM': ['Nº CCM', 'SSOP', 'STATUS'],
-                    'TAP': ['Nº TAP', 'SSOP', 'STATUS'], 'TTAS': ['Nº TTAS', 'SOP', 'STATUS'],
-                    'LI_ITENS': ['TAG', 'SOP', 'SSOP', 'DESCRIÇÃO'], 'LI_MALHAS': ['MALHA', 'SOP', 'SSOP', 'DESCRIÇÃO']}
 
 
 def _localizar_cabecalho(linhas, spec):
@@ -204,25 +303,26 @@ def ler_provisorio(tipo, arquivo):
         esperado = '; '.join(f'{campo.upper()}: ' + ' / '.join(aceitos) + ('' if obrig else ' (opcional)')
                              for campo, obrig, aceitos in spec)
         raise ErroImportacao(f'Cabeçalho de {tipo} não encontrado. Colunas esperadas (por nome) – {esperado}. '
-                             f'Use Arquivo > Exportar planilhas-modelo para ver o formato.')
+                             f'Use o arquivo exportado da FIC, sem editar.')
     aba, linhas, i, pos = achado
     ident = spec[0][0]
-    chave_doc = 'sop' if tipo == 'TTAS' else 'ssop'
+    chave_doc = 'sop' if tipo in ('TAP', 'TTAS') else 'ssop'
     regs, ignoradas, nao_dados = [], [], []
     for n, r in enumerate(linhas[i + 1:], i + 2):
         val = {campo: (texto(r[p]) if p < len(r) else '') for campo, p in pos.items()}
-        if val[ident] == '':
+        if all(v == '' for v in val.values()):
             nao_dados.append(r)
-            continue  # mesma regra da planilha: só conta linha com a coluna de identificação preenchida
+            continue
         if _nome_coluna(val[ident]) in spec[0][2]:
             ignoradas.append(n)  # cabeçalho repetido
             nao_dados.append(r)
             continue
-        if 'status' not in val:   # bases (LI de Itens/Malhas): item sem SSOP é válido (não alocado); só o rodapé sai
-            vazia = all(chave(v) == '' for c, v in val.items() if c != ident)
-        else:
-            vazia = chave(val[chave_doc]) == '' and chave(val['status']) == ''
-        if vazia:
+        if tipo == 'TAP' and val.get('sop', '') == '':
+            m = re.match(r'TAP-(S?SOP-.+)$', val[ident].strip())
+            val['sop'] = m.group(1) if m else ''   # o número do TAP é "TAP-" + SOP
+        # registro sem número (ex.: CCMOCULTO) só vale com SSOP/SOP E status; rodapé não tem os dois
+        sem_doc, sem_status = chave(val.get(chave_doc, '')) == '', chave(val['status']) == ''
+        if (sem_doc and sem_status) or (val[ident] == '' and (sem_doc or sem_status)):
             ignoradas.append(n)  # rodapé/linha sem SSOP/SOP e sem status
             nao_dados.append(r)
             continue

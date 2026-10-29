@@ -3,7 +3,7 @@
 Referência de cada regra (planilha original, scripts/02_estrutura.py):
 - IMP_FVI AP:BD (por TAG): VALIDO, CII/CIII/CV_APLIC e _OK, FORA_DA_BASE, COD_DESCONHECIDO, SEM_FVI, SEM_SSOP, CIV_ATIVO;
 - IMP_FVM/IMP_CCM/IMP_TAP/IMP_TTAS: VALIDO, *_OK, FORA_DA_BASE, COD_DESCONHECIDO;
-- abas FVI/FVM/CCM/TAP (por SSOP e SOP), TTAS (por SOP), VISAO_GERENCIAL (por unidade, totais ponderados), VERIFICACAO.
+- abas FVI/FVM/CCM (por SSOP e SOP), TAP e TTAS (por SOP – como numera a FIC), VISAO_GERENCIAL (por unidade, totais ponderados), VERIFICACAO.
 Comparações seguem o Excel: TRIM e sem diferença de maiúsculas/minúsculas (ver texto.py)."""
 import json
 from collections import defaultdict
@@ -49,44 +49,6 @@ def _malhas_em_varias_ssop(regs):
     return {k: v for k, v in m.items() if len(v) > 1}
 
 
-def _conferir_bases(R, dados, base_ssop, teste, pend):
-    """Conferências com a LI de Itens e a LI de Malhas (só quando importadas). Não alteram os percentuais."""
-    for tipo, nome, ident, fic, docs in (('LI_ITENS', 'LI de Itens', 'tag', 'FVI', 'cadastro FVI'),
-                                          ('LI_MALHAS', 'LI de Malhas', 'malha', 'FVM', 'FVM')):
-        li = dados.get(tipo) or []
-        if not li:
-            continue
-        teste(nome, f'{nome} – registros lidos', len(li), None)
-        fora = [r for r in li if chave(r['ssop']) and chave(r['ssop']) not in base_ssop]
-        teste(nome, f'{nome} – registros com SSOP fora da base', len(fora))
-        for r in fora:
-            pend.append((nome, r['linha'], r[ident], r['ssop'], 'SSOP fora da base (LI de SOP / SSOP)'))
-        teste(nome, f'{nome} – registros sem SSOP', sum(1 for r in li if not chave(r['ssop'])), None)
-        if tipo == 'LI_MALHAS':
-            multi = _malhas_em_varias_ssop(li)
-            teste(nome, f'{nome} – malhas em mais de uma SSOP (pode, mas não deve)', len(multi))
-            for k, ss in multi.items():
-                pend.append((nome, '', k, ' / '.join(sorted(ss)), f'malha em {len(ss)} SSOP (pode, mas não deve)'))
-        ssop_li = defaultdict(set)
-        for r in li:
-            ssop_li[chave(r[ident])].add(chave(r['ssop']))
-        regs = dados.get(fic) or []
-        if not regs:
-            continue
-        ssop_fic = defaultdict(set)
-        for r in regs:
-            ssop_fic[chave(r[ident])].add(chave(r['ssop']))
-        so_fic = sorted(set(ssop_fic) - set(ssop_li))
-        so_li = sorted(set(ssop_li) - set(ssop_fic))
-        diverge = sorted(k for k in set(ssop_li) & set(ssop_fic) if ssop_li[k] != ssop_fic[k])
-        teste(nome, f'{nome} – {ident.upper()}s do {docs} que não estão na {nome}', len(so_fic), None)
-        teste(nome, f'{nome} – {ident.upper()}s da {nome} que não estão no {docs}', len(so_li), None)
-        teste(nome, f'{nome} – {ident.upper()}s com SSOP diferente entre a {nome} e o {docs}', len(diverge), None)
-        for k in diverge:
-            pend.append((nome, '', k, f'{nome}: {" / ".join(sorted(ssop_li[k]))} · {docs}: {" / ".join(sorted(ssop_fic[k]))}',
-                         f'SSOP diferente entre a {nome} e o {docs}'))
-
-
 def _descricao(dados):
     """Descrição da TAG guardada no JSON da linha do cadastro."""
     if isinstance(dados, str):
@@ -116,7 +78,7 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
     R.unidades = list(unidades)
 
     zeros = ('tags', 'cii_aplic', 'cii_aprov', 'ciii_aplic', 'ciii_aprov', 'cv_aplic', 'cv_aprov', 'tags_sem_fvi',
-             'malhas', 'fvm_ciii', 'fvm_cv', 'ccm_reg', 'ccm_ok', 'tap_reg', 'tap_ok')
+             'malhas', 'fvm_ciii', 'fvm_cv', 'ccm_reg', 'ccm_ok')
     acc = {chave(s['ssop']): dict.fromkeys(zeros, 0) for s in ssops}
     base_ssop = {chave(s['ssop']): s for s in ssops}
     pend = R.pendencias
@@ -161,7 +123,7 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
             continue
         if k not in acc:
             n['fora'] += 1
-            pend.append(('FVI', t['linha'], t['tag'], t['ssop'], 'SSOP fora da base (LI)'))
+            pend.append(('FVI', t['linha'], t['tag'], t['ssop'], 'SSOP fora da base (SOP / SSOP)'))
             continue
         a = acc[k]
         a['tags_sem_fvi'] += sem_fvi   # coluna O da aba FVI: soma SEM_FVI de todas as linhas do SSOP
@@ -194,7 +156,7 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
                 continue
             if k not in acc:
                 m['fora'] += 1
-                pend.append((doc, r['linha'], r[ident], r['ssop'], 'SSOP fora da base (LI)'))
+                pend.append((doc, r['linha'], r[ident], r['ssop'], 'SSOP fora da base (SOP / SSOP)'))
                 continue
             if valido:
                 yield acc[k], st
@@ -223,36 +185,40 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
     for a, st in por_ssop('CCM', dados.get('CCM', []), 'numero', 'CCM', True):
         a['ccm_reg'] += 1
         a['ccm_ok'] += st != '' and st in crit['CCM']
-    for a, st in por_ssop('TAP', dados.get('TAP', []), 'numero', 'TAP', False):
-        a['tap_reg'] += 1
-        a['tap_ok'] += st != '' and st in crit['TAP']
 
-    # ------------------------------------------------------------------ TTAS (por SOP)
-    acc_sop = {chave(s['sop']): {'ttas_reg': 0, 'ttas1': 0, 'ttas2': 0} for s in sops}
-    m = dict.fromkeys(('lidas', 'fora', 'desconhecido', 'sem_ssop', 'canceladas'), 0)
-    for r in dados.get('TTAS', []):
-        m['lidas'] += 1
-        k = chave(r['sop'])
-        st = chave(r['status'])
-        valido = st not in canc or st == ''
-        m['canceladas'] += not valido
-        if desconhecido('TTAS', r['status']):
-            m['desconhecido'] += 1
-            pend.append(('TTAS', r['linha'], r['numero'], r['sop'], f'status com código desconhecido: {r["status"]}'))
-        if k == '':
-            m['sem_ssop'] += 1
-            pend.append(('TTAS', r['linha'], r['numero'], '', 'registro sem SOP'))
-            continue
-        if k not in acc_sop:
-            m['fora'] += 1
-            pend.append(('TTAS', r['linha'], r['numero'], r['sop'], 'SOP fora da base (LI)'))
-            continue
-        if valido:
-            b = acc_sop[k]
-            b['ttas_reg'] += 1
-            b['ttas1'] += st != '' and st in crit['TTAS1']
-            b['ttas2'] += st != '' and st in crit['TTAS2']
-    cont['TTAS'] = m
+    # ------------------------------------------------------------------ TAP e TTAS (por SOP)
+    acc_sop = {chave(s['sop']): {'tap_reg': 0, 'tap_ok': 0, 'ttas_reg': 0, 'ttas1': 0, 'ttas2': 0} for s in sops}
+
+    def por_sop(doc, regs, ignora_na):
+        m = dict.fromkeys(('lidas', 'fora', 'desconhecido', 'sem_ssop', 'canceladas'), 0)
+        for r in regs:
+            m['lidas'] += 1
+            k = chave(r['sop'])
+            st = chave(r['status'])
+            valido = st not in canc or st == ''
+            m['canceladas'] += not valido
+            if desconhecido(doc, r['status'], ignora_na):
+                m['desconhecido'] += 1
+                pend.append((doc, r['linha'], r['numero'], r['sop'], f'status com código desconhecido: {r["status"]}'))
+            if k == '':
+                m['sem_ssop'] += 1
+                pend.append((doc, r['linha'], r['numero'], '', 'registro sem SOP'))
+                continue
+            if k not in acc_sop:
+                m['fora'] += 1
+                pend.append((doc, r['linha'], r['numero'], r['sop'], 'SOP fora da base (SOP / SSOP)'))
+                continue
+            if valido:
+                yield acc_sop[k], st
+        cont[doc] = m
+
+    for b, st in por_sop('TAP', dados.get('TAP', []), False):
+        b['tap_reg'] += 1
+        b['tap_ok'] += st != '' and st in crit['TAP']
+    for b, st in por_sop('TTAS', dados.get('TTAS', []), True):
+        b['ttas_reg'] += 1
+        b['ttas1'] += st != '' and st in crit['TTAS1']
+        b['ttas2'] += st != '' and st in crit['TTAS2']
 
     # ------------------------------------------------------------------ status da FIC exibido por SSOP / SOP
     def status_exibido(regs, campo, etapa):
@@ -268,7 +234,7 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
                 melhor[k] = (cand, r['status'].strip())
         return {k: v[1] for k, v in melhor.items()}
     st_ccm = status_exibido(dados.get('CCM', []), 'ssop', 'CCM')
-    st_tap = status_exibido(dados.get('TAP', []), 'ssop', 'TAP')
+    st_tap = status_exibido(dados.get('TAP', []), 'sop', 'TAP')
     st_ttas = status_exibido(dados.get('TTAS', []), 'sop', 'TTAS2')
     # TTAS é um registro só por SOP que avança (slide 219): status de etapa 2 implica TTAS 1 aprovado
     etapa2 = (crit['TTAS1'] - {'TTAS1APROVADO'}) | crit['TTAS2']
@@ -287,15 +253,13 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
     for s in ssops:
         a = acc[chave(s['ssop'])]
         R.ssop.append({
-            'ccm_status': st_ccm.get(chave(s['ssop']), ''), 'tap_status': st_tap.get(chave(s['ssop']), ''),
+            'ccm_status': st_ccm.get(chave(s['ssop']), ''),
             'unidade': s['unidade'], 'sop': s['sop'], 'ssop': s['ssop'], 'descricao': s['descricao'], **a,
             'pct_cii': pct(a['cii_aprov'], a['cii_aplic']), 'pct_ciii': pct(a['ciii_aprov'], a['ciii_aplic']),
             'pct_cv': pct(a['cv_aprov'], a['cv_aplic']),
             'pct_fvm_ciii': pct(a['fvm_ciii'], a['malhas']), 'pct_fvm_cv': pct(a['fvm_cv'], a['malhas']),
             'ccm_aprovado': 1 if a['ccm_ok'] else 0,
             'ccm_situacao': 'APROVADO' if a['ccm_ok'] else ('SEM REGISTRO' if a['ccm_reg'] == 0 else 'EM ANDAMENTO'),
-            'tap_concluido': 1 if a['tap_ok'] else 0,
-            'tap_situacao': 'CONCLUÍDO' if a['tap_ok'] else ('SEM REGISTRO' if a['tap_reg'] == 0 else 'EM ANDAMENTO'),
         })
 
     # ------------------------------------------------------------------ linhas por SOP (somas das SSOP)
@@ -313,12 +277,14 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
         st = st_ttas.get(k, '')
         t1, t2 = ttas_etapas(st)
         R.sop.append({
-            'ttas_status': st, 'ttas1_status': t1, 'ttas2_status': t2,
+            'ttas_status': st, 'ttas1_status': t1, 'ttas2_status': t2, 'tap_status': st_tap.get(k, ''),
             'unidade': s['unidade'], 'sop': s['sop'], 'descricao': s['descricao'], **p, **b,
             'pct_cii': pct(p['cii_aprov'], p['cii_aplic']), 'pct_ciii': pct(p['ciii_aprov'], p['ciii_aplic']),
             'pct_cv': pct(p['cv_aprov'], p['cv_aplic']),
             'pct_fvm_ciii': pct(p['fvm_ciii'], p['malhas']), 'pct_fvm_cv': pct(p['fvm_cv'], p['malhas']),
             'ttas1_aprovado': 1 if b['ttas1'] else 0, 'ttas2_aprovado': 1 if b['ttas2'] else 0,
+            'tap_concluido': 1 if b['tap_ok'] else 0,
+            'tap_situacao': 'CONCLUÍDO' if b['tap_ok'] else ('SEM REGISTRO' if b['tap_reg'] == 0 else 'EM ANDAMENTO'),
             'ttas_situacao': 'TTAS2 APROVADO' if b['ttas2'] else ('TTAS1 APROVADO' if b['ttas1'] else
                                                                   ('SEM REGISTRO' if b['ttas_reg'] == 0 else 'EM ANDAMENTO')),
         })
@@ -330,14 +296,14 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
                   'fvm_ciii', 'fvm_cv', 'tags_sem_fvi'):
             v[c] = sum(r[c] for r in ssop_rows)
         v['ccm'] = sum(r['ccm_aprovado'] for r in ssop_rows)
-        v['tap'] = sum(r['tap_concluido'] for r in ssop_rows)
+        v['tap'] = sum(r['tap_concluido'] for r in sop_rows)
         v['ttas1'] = sum(r['ttas1_aprovado'] for r in sop_rows)
         v['ttas2'] = sum(r['ttas2_aprovado'] for r in sop_rows)
         v.update({
             'pct_cii': pct(v['cii_aprov'], v['cii_aplic']), 'pct_ciii': pct(v['ciii_aprov'], v['ciii_aplic']),
             'pct_cv': pct(v['cv_aprov'], v['cv_aplic']),
             'pct_fvm_ciii': pct(v['fvm_ciii'], v['malhas']), 'pct_fvm_cv': pct(v['fvm_cv'], v['malhas']),
-            'pct_ccm': pct(v['ccm'], v['ssop']), 'pct_tap': pct(v['tap'], v['ssop']),
+            'pct_ccm': pct(v['ccm'], v['ssop']), 'pct_tap': pct(v['tap'], v['sop']),
             'pct_ttas1': pct(v['ttas1'], v['sop']), 'pct_ttas2': pct(v['ttas2'], v['sop']),
         })
         return v
@@ -355,21 +321,25 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
     teste('FVI', 'Cadastro FVI – TAGs com SSOP fora da base', f['fora'])
     teste('FVI', 'Cadastro FVI – status com código desconhecido', f['desconhecido'])
     teste('FVI', 'Cadastro FVI – TAGs com Campo IV diferente de N/A (campo não acompanhado)', f['civ'])
-    for doc in ('FVM', 'CCM', 'TAP'):
+    avisos = dados.get('AVISOS_BASE') or []
+    teste('SOP / SSOP', 'SOP / SSOP – avisos da importação (SOP fora da lista, código fora do padrão)', len(avisos))
+    for cod_, problema in avisos:
+        pend.append(('SOP / SSOP', '', cod_, cod_, problema))
+    for doc in ('FVM', 'CCM'):
         teste(doc, f'{doc} – linhas com SSOP fora da base', c[doc]['fora'])
         teste(doc, f'{doc} – status com código desconhecido', c[doc]['desconhecido'])
-    teste('TTAS', 'TTAS – linhas com SOP fora da base', c['TTAS']['fora'])
-    teste('TTAS', 'TTAS – status com código desconhecido', c['TTAS']['desconhecido'])
+    for doc in ('TAP', 'TTAS'):
+        teste(doc, f'{doc} – linhas com SOP fora da base', c[doc]['fora'])
+        teste(doc, f'{doc} – status com código desconhecido', c[doc]['desconhecido'])
     teste('FVI', 'Cadastro FVI – TAGs lidas', f['lidas'], None)
     teste('FVI', 'Cadastro FVI – TAGs sem SSOP (não alocadas – não contam avanço)', f['sem_ssop'], None)
     teste('FVI', 'Cadastro FVI – TAGs sem FVI gerada', f['sem_fvi'], None)
     teste('FVI', 'Cadastro FVI – TAGs canceladas (fora das contas)', f['canceladas'], None)
     for doc in ('FVM', 'CCM', 'TAP', 'TTAS'):
         teste(doc, f'{doc} – registros lidos', c[doc]['lidas'], None)
-        teste(doc, f'{doc} – registros sem {"SOP" if doc == "TTAS" else "SSOP"}', c[doc]['sem_ssop'], None)
+        teste(doc, f'{doc} – registros sem {"SOP" if doc in ("TAP", "TTAS") else "SSOP"}', c[doc]['sem_ssop'], None)
         teste(doc, f'{doc} – registros cancelados (fora das contas)', c[doc]['canceladas'], None)
     teste('FVM', 'FVM – malhas em mais de uma SSOP (pode, mas não deve)', len(multi_fvm))
-    _conferir_bases(R, dados, acc, teste, pend)
     for doc in ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS'):
         teste('CRITÉRIOS', f'Lista oficial de status {doc} carregada (códigos)', len(cod[doc]), None)
     return R
