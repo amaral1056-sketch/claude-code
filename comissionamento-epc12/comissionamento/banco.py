@@ -49,8 +49,9 @@ CREATE TABLE IF NOT EXISTS historico (
     PRIMARY KEY (data_referencia, unidade));
 """
 
-TABELAS_IMPORTACAO = {'FVI': 'fvi_tag', 'FVM': 'fvm', 'FVM_STATUS': 'fvm_status', 'CCM': 'ccm', 'TAP': 'tap', 'TTAS': 'ttas'}
-TIPOS_FIC = ('FVI', 'FVM', 'FVM_STATUS', 'CCM', 'TAP', 'TTAS')
+# FVM_BASE = Hierarquia de Malhas (base, sem data) · FVM = atualização (Lista de FVM: Nº e status por malha)
+TABELAS_IMPORTACAO = {'FVI': 'fvi_tag', 'FVM_BASE': 'fvm', 'FVM': 'fvm_status', 'CCM': 'ccm', 'TAP': 'tap', 'TTAS': 'ttas'}
+TIPOS_FIC = ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')
 COLUNAS_HISTORICO = ('sop', 'ssop', 'tags', 'cii_aplic', 'cii_aprov', 'ciii_aplic', 'ciii_aprov', 'cv_aplic',
                      'cv_aprov', 'malhas', 'fvm_ciii', 'fvm_cv', 'ccm', 'tap', 'ttas1', 'ttas2', 'tags_sem_fvi')
 

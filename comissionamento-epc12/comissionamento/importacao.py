@@ -5,9 +5,10 @@
   A LI antiga (aba LISTA) continua aceita, com as checagens da etapa 01 da planilha original.
 - Relatório de Cadastro Geral da FIC (FVI): o arquivo exportado, sem edição (título, cabeçalho, dados, rodapé).
   Mesma regra de leitura da IMP_FVI: linha de dado = TAG e CONTRATO preenchidos e TAG diferente de "TAG".
-- FVM, dois relatórios da FIC (cada um substitui só a sua parte):
-  "Relatório de Hierarquia de Malhas" – linhas MALHA seguidas das TAG/LINHA da malha, com SSOP/SOP (uma linha por TAG);
-  "Relatório de Status de Malhas" – malha, Nº da FVM e Status da FVM (como vem: a descrição, ex.: "Aprovado").
+- FVM BASE: "Relatório de Hierarquia de Malhas" – linhas MALHA seguidas das TAG/LINHA da malha, com SSOP/SOP
+  (uma linha por TAG). Define as malhas acompanhadas.
+- FVM (atualização): "Lista de FVM" da FIC (Código FVM, Malha, Status – código) ou "Relatório de Status de Malhas"
+  (Malha, FVM, Status – descrição).
 - CCM (por SSOP), TAP e TTAS (por SOP): listas da FIC; colunas localizadas pelo NOME do cabeçalho
   (COLUNAS_PROVISORIAS). No TAP sem coluna SOP, o SOP vem do número ("TAP-" + SOP).
 - STATUS_*.xlsx: listas oficiais de status (código | descrição).
@@ -214,24 +215,61 @@ def ler_cadastro(arquivo):
 
 
 # ====================================================================== FVM: relatórios de malhas da FIC
-def ler_fvm(arquivo):
-    """Hierarquia de Malhas (tipo FVM) ou Status de Malhas (tipo FVM_STATUS), reconhecido pelo cabeçalho.
-    Devolve (registros, data_de_emissão|None, informações com 'tipo')."""
+SPEC_HIERARQUIA = [('tipo', True, ('TIPO',)), ('malha', True, ('MALHA',)), ('tag', True, ('TAG/LINHAS', 'TAG/LINHA', 'TAG')),
+                   ('status', True, ('STATUS',)), ('ssop', True, ('SSOP',)), ('sop', False, ('SOP',))]
+
+
+def _linhas_planilha(arquivo):
     wb = _abrir(arquivo)
     linhas = [tuple(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
     aba = wb.worksheets[0].title
     wb.close()
-    spec_h = [('tipo', True, ('TIPO',)), ('malha', True, ('MALHA',)), ('tag', True, ('TAG/LINHAS', 'TAG/LINHA', 'TAG')),
-              ('status', True, ('STATUS',)), ('ssop', True, ('SSOP',)), ('sop', False, ('SOP',))]
-    spec_s = [('malha', True, ('MALHA',)), ('n_fvm', True, ('FVM', 'Nº FVM', 'NUMERO FVM')), ('status', True, ('STATUS',))]
-    i, pos = _localizar_cabecalho(linhas, spec_h)
+    return linhas, aba
+
+
+def ler_fvm_base(arquivo):
+    """FVM BASE = Relatório de Hierarquia de Malhas. Devolve (registros, data_de_emissão|None, informações)."""
+    linhas, aba = _linhas_planilha(arquivo)
+    i, pos = _localizar_cabecalho(linhas, SPEC_HIERARQUIA)
+    if i is None:
+        raise ErroImportacao('A FVM BASE deve ser o "Relatório de Hierarquia de Malhas" da FIC (colunas TIPO, MALHA, '
+                             'TAG/LINHAS, STATUS, SSOP). Nada foi gravado.')
+    return _hierarquia(linhas, i, pos, aba)
+
+
+def ler_fvm(arquivo):
+    """Atualização de FVM: Lista de FVM (Código FVM, Malha, Status) ou Relatório de Status de Malhas.
+    Devolve (registros malha/n_fvm/status, data_de_emissão|None, informações)."""
+    linhas, aba = _linhas_planilha(arquivo)
+    if _localizar_cabecalho(linhas, SPEC_HIERARQUIA)[0] is not None:
+        raise ErroImportacao('Este é o Relatório de Hierarquia de Malhas: importe-o em Importar atualização ▸ FVM BASE. '
+                             'Em FVM vai a Lista de FVM da FIC. Nada foi gravado.')
+    spec_l = [('n_fvm', True, ('CODIGO FVM', 'CODIGO DA FVM')), ('malha', True, ('MALHA',)), ('status', True, ('STATUS',))]
+    i, pos = _localizar_cabecalho(linhas, spec_l)
     if i is not None:
-        return _hierarquia(linhas, i, pos, aba)
+        return _lista_fvm(linhas, i, pos, aba)
+    spec_s = [('malha', True, ('MALHA',)), ('n_fvm', True, ('FVM', 'Nº FVM', 'NUMERO FVM')), ('status', True, ('STATUS',))]
     i, pos = _localizar_cabecalho(linhas, spec_s)
     if i is not None:
         return _status_malhas(linhas, i, pos, aba)
-    raise ErroImportacao('Arquivo de FVM não reconhecido. Use o "Relatório de Hierarquia de Malhas" (colunas TIPO, MALHA, '
-                         'TAG/LINHAS, STATUS, SSOP) ou o "Relatório de Status de Malhas" (colunas Malha, FVM, Status) da FIC.')
+    raise ErroImportacao('Arquivo de FVM não reconhecido. Use a "Lista de FVM" da FIC (colunas Código FVM, Malha, Status).')
+
+
+def _lista_fvm(linhas, i, pos, aba):
+    """Lista de FVM: uma linha por FVM, status como código (ex.: APROVADO)."""
+    regs, ignoradas = [], []
+    for n, r in enumerate(linhas[i + 1:], i + 2):
+        if _nome_coluna(r[0] if r else '').startswith('EMISSAO'):
+            ignoradas.extend(range(n, len(linhas) + 1))
+            break
+        malha = _valor(r, pos, 'malha')
+        if malha:
+            regs.append({'linha': n, 'malha': malha, 'n_fvm': _valor(r, pos, 'n_fvm'), 'status': _valor(r, pos, 'status')})
+        elif any(texto(x) for x in r):
+            ignoradas.append(n)
+    if not regs:
+        raise ErroImportacao(f'Nenhuma FVM encontrada na Lista de FVM (aba {aba}).')
+    return regs, data_do_rodape(linhas), {'aba': aba, 'registros': len(regs), 'linhas_ignoradas': ignoradas}
 
 
 def _valor(r, pos, c):
@@ -259,7 +297,7 @@ def _hierarquia(linhas, i, pos, aba):
     if not regs:
         raise ErroImportacao(f'Nenhuma malha encontrada no Relatório de Hierarquia de Malhas (aba {aba}).')
     regs.sort(key=lambda r: r['linha'])
-    return regs, data_do_rodape(linhas), {'tipo': 'FVM', 'aba': aba, 'registros': len(regs),
+    return regs, data_do_rodape(linhas), {'aba': aba, 'registros': len(regs),
                                           'malhas': len({r['malha'] for r in regs}), 'linhas_ignoradas': ignoradas}
 
 
@@ -278,7 +316,7 @@ def _status_malhas(linhas, i, pos, aba):
             ignoradas.append(n)
     if not regs:
         raise ErroImportacao(f'Nenhuma malha encontrada no Relatório de Status de Malhas (aba {aba}).')
-    return regs, data_do_rodape(linhas), {'tipo': 'FVM_STATUS', 'aba': aba, 'registros': len(regs),
+    return regs, data_do_rodape(linhas), {'aba': aba, 'registros': len(regs),
                                           'filtro_status': filtro.rstrip(', '), 'linhas_ignoradas': ignoradas}
 
 

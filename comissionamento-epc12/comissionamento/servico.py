@@ -4,10 +4,10 @@ import datetime
 from . import calculo, importacao
 from .importacao import ErroImportacao
 
-TIPOS_FIC = ('FVI', 'FVM', 'FVM_STATUS', 'CCM', 'TAP', 'TTAS')
+TIPOS_FIC = ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')
 TIPOS_MENU = ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')
 NOMES = {'FVI': 'Relatório de Cadastro Geral (FVI)',
-         'FVM': 'FVM (Relatório de Hierarquia de Malhas ou Relatório de Status de Malhas)', 'CCM': 'CCM', 'TAP': 'TAP',
+         'FVM': 'FVM (Lista de FVM)', 'CCM': 'CCM', 'TAP': 'TAP',
          'TTAS': 'TTAS'}
 
 
@@ -21,6 +21,15 @@ def importar_li(banco, arquivo):
     if avisos:
         msg += f' {len(avisos)} aviso(s) na página Verificação.'
     return msg
+
+
+def importar_fvm_base(banco, arquivo):
+    """FVM BASE (Hierarquia de Malhas): substitui a base de malhas; sem data de referência nem histórico."""
+    regs, _, info = importacao.ler_fvm_base(arquivo)
+    ign = info.get('linhas_ignoradas') or []
+    banco.substituir_dados('FVM_BASE', regs, arquivo, None, f'{len(ign)} linha(s) de rodapé ignorada(s)' if ign else '')
+    return (f'FVM BASE importada: {info["malhas"]} malhas, {len(regs)} TAG(s)/linha(s), '
+            f'{len({r["ssop"] for r in regs if r["ssop"]})} SSOP.')
 
 
 def ler_fic(tipo, arquivo):
@@ -37,7 +46,8 @@ def gravar_fic(banco, tipo, arquivo, registros, data_referencia, info=None):
     if not banco.tem_base():
         raise ErroImportacao('Importe primeiro a lista de SOP / SSOP (Importar atualização ▸ SOP / SSOP).')
     data_iso = _iso(data_referencia)
-    tipo = (info or {}).get('tipo', tipo)       # FVM: hierarquia (FVM) ou status de malhas (FVM_STATUS)
+    if tipo == 'FVM' and not banco.dados('FVM_BASE'):
+        raise ErroImportacao('Importe primeiro a FVM BASE (Importar atualização ▸ FVM BASE).')
     obs = []
     if info and info.get('linhas_ignoradas'):
         obs.append(f'{len(info["linhas_ignoradas"])} linha(s) ignorada(s) (cabeçalho repetido ou rodapé)')
@@ -67,7 +77,7 @@ def importar_status(banco, arquivo, tipo=None):
 
 
 def calcular(banco):
-    dados = {t: banco.dados(t) for t in TIPOS_FIC}
+    dados = {t: banco.dados(t) for t in TIPOS_FIC + ('FVM_BASE',)}
     dados['AVISOS_BASE'] = banco.avisos_base()
     return calculo.calcular(banco.base(), banco.criterios(), banco.status_fic(), banco.incluir_sem_fvi, dados)
 

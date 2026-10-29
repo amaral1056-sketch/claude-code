@@ -20,8 +20,9 @@ def carregar(banco, tmp_path):
     # FVI: data do rodapé (28/10/2026). Os demais não têm rodapé: a data é informada, como o usuário faz na tela.
     servico.importar_fic(banco, 'FVI', f.cadastro(tmp_path / 'cad.xlsx', f.TAGS_SINTETICAS))
     d = '28/10/2026'
-    for arq in f.fvm(tmp_path, f.FVM_SINTETICO):        # Hierarquia de Malhas + Relatório de Status de Malhas
-        servico.importar_fic(banco, 'FVM', arq, d)
+    base, lista = f.fvm(tmp_path, f.FVM_SINTETICO)      # FVM BASE (Hierarquia de Malhas) + Lista de FVM
+    servico.importar_fvm_base(banco, base)
+    servico.importar_fic(banco, 'FVM', lista, d)
     servico.importar_fic(banco, 'CCM', f.provisorio(tmp_path / 'ccm.xlsx', ['Nº CCM', 'SSOP', 'STATUS'], f.CCM_SINTETICO), d)
     servico.importar_fic(banco, 'TAP', f.provisorio(tmp_path / 'tap.xlsx', f.CABECALHO_TAP, f.TAP_SINTETICO), d)
     servico.importar_fic(banco, 'TTAS', f.provisorio(tmp_path / 'ttas.xlsx', ['Nº TTAS', 'SOP', 'STATUS'], f.TTAS_SINTETICO), d)

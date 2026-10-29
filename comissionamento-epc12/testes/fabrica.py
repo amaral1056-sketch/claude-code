@@ -142,12 +142,20 @@ def status_malhas(caminho, linhas, filtro='Status FVM: Aprovado, Cancelado, ', e
     return caminho
 
 
+def lista_fvm(caminho, linhas):
+    """Lista de FVM da FIC: [(Código FVM, malha, status – código)]."""
+    return provisorio(caminho, ['Código FVM', 'Descrição', 'Malha', 'Disciplina', 'Código do Template', 'Status',
+                                'Empreendimento', 'Rotear', 'Grupo de Proprietários'],
+                      [(c, f'FVM - {m}-MALHA DE TESTE', m, 'INS', 'FVM-INS001', st, 'EMPREENDIMENTO TESTE', 'N', '')
+                       for c, m, st in linhas])
+
+
 def fvm(pasta, linhas):
-    """Os dois relatórios de FVM a partir de [(malha, SOP, SSOP, status)]: hierarquia (uma TAG por malha e SSOP)
-    e status de malhas (um status por malha). Devolve (hierarquia, status)."""
+    """FVM BASE (hierarquia: uma TAG por malha e SSOP) e a Lista de FVM (um status por malha) a partir de
+    [(malha, SOP, SSOP, status)]. Devolve (base, lista)."""
     malhas = {}
     for m, sop, ssop, st in linhas:
         malhas.setdefault(m, [st, []])[1].append(('TAG', f'T-{m}-{len(malhas[m][1]) + 1}', ssop, sop))
-    h = hierarquia_malhas(pasta / 'fvm_hierarquia.xlsx', [(m, 'OPERAÇÃO', filhos) for m, (_, filhos) in malhas.items()])
-    s = status_malhas(pasta / 'fvm_status.xlsx', [(m, str(100 + i), st) for i, (m, (st, _)) in enumerate(malhas.items())])
-    return h, s
+    base = hierarquia_malhas(pasta / 'fvm_base.xlsx', [(m, 'OPERAÇÃO', filhos) for m, (_, filhos) in malhas.items()])
+    lista = lista_fvm(pasta / 'fvm_lista.xlsx', [(str(100 + i), m, st) for i, (m, (st, _)) in enumerate(malhas.items())])
+    return base, lista

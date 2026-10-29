@@ -69,9 +69,10 @@ def test_cadastro_sem_rodape_usa_data_informada(banco, tmp_path):
 
 def test_status_de_malhas_sem_rodape_e_com_filtro(banco, tmp_path):
     p = f.status_malhas(tmp_path / 'fvm.xlsx', [('M1', '10', 'Aprovado'), ('M2', '', '')], emissao='30/10/2026')
-    regs, data, info = servico.importar_fic(banco, 'FVM', p)
+    regs, data, info = importacao.ler_fvm(p)
+    data = data.isoformat()
     assert [(r['malha'], r['n_fvm'], r['status']) for r in regs] == [('M1', '10', 'Aprovado'), ('M2', '', '')]  # sem rodapé
-    assert data == '2026-10-30' and info['tipo'] == 'FVM_STATUS'
+    assert data == '2026-10-30'
     assert info['filtro_status'] == 'Status FVM: Aprovado, Cancelado'
 
 

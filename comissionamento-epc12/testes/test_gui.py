@@ -101,9 +101,15 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
     assert len(d['tabela'].linhas) == 4
     # FVM: M6 aparece em duas SSOP (pode, mas não deve) – entra nas duas e é sinalizada
     fvm = f.FVM_SINTETICO + [('M6', f.P1, f.S1, 'ACAMPO5'), ('M6', f.P2, f.S2, 'ACAMPO5')]
-    for arq in f.fvm(tmp_path, fvm):
-        escolher(monkeypatch, arq, '28/10/2026')
-        app.importar_fic('FVM')
+    base, lista = f.fvm(tmp_path, fvm)
+    escolher(monkeypatch, lista, '28/10/2026')
+    app.importar_fic('FVM')                                   # sem FVM BASE: recusa e não grava
+    assert app.msgs[-1][:2] == ('showerror', 'Importação não realizada') and app.banco.dados('FVM') == []
+    escolher(monkeypatch, base)
+    app.importar_fvm_base()
+    assert app.msgs[-1][1] == 'FVM BASE importada'
+    escolher(monkeypatch, lista, '28/10/2026')
+    app.importar_fic('FVM')
     assert [c[0] for c in gui.rotulos.COL_MALHAS] == ['Malha', 'TAG', 'SSOP', 'Status da FVM']
     malhas = {(m['malha'], m['ssop']): m for m in app.fvm['tabela'].linhas}
     assert malhas[('M6', f.S2)]['tag'] == 'T-M6-2'
@@ -142,7 +148,7 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
         app.mostrar(nome)
         app.update()
     assert [r['data_referencia'] for r in app.t_hist.linhas] == ['2026-10-28']   # TOTAL de 28/10
-    assert [r['tipo'] for r in app.t_imp.linhas] == ['TTAS', 'FVM_STATUS', 'FVM', 'CCM', 'FVI', 'LI']
+    assert [r['tipo'] for r in app.t_imp.linhas] == ['TTAS', 'FVM', 'FVM_BASE', 'CCM', 'FVI', 'LI']
 
 
 def test_arquivo_errado_nao_grava(app, tmp_path, monkeypatch):
@@ -197,7 +203,7 @@ def test_menus_de_importacao_e_logo(app):
     assert not hasattr(app, 'btn_bases')                                            # só o botão de atualização
     m = app.menu_importar()
     rotulos_menu = [m.entrycget(i, 'label') for i in range(m.index('end') + 1) if m.type(i) == 'command']
-    assert rotulos_menu == ['SOP / SSOP', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
+    assert rotulos_menu == ['SOP / SSOP', 'FVM BASE', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
     assert app.logo.cget('image') is not None and app.logo.cget('text') == ''       # logo embutida, não o quadrado
 
 
@@ -208,11 +214,11 @@ def test_modelos_da_fic_pela_tela(app, tmp_path, monkeypatch):
     escolher(monkeypatch, f.hierarquia_malhas(tmp_path / 'fvm.xlsx', [
         ('M1', 'OPERAÇÃO', [('TAG', 'T1', f.S1, f.P1)]),
         ('M2', 'PRONTO', [('TAG', 'T2', f.S1, f.P1), ('TAG', 'T3', f.S2, f.P2)])]))
-    app.importar_fic('FVM')
+    app.importar_fvm_base()
     assert len(app.fvm['tabela'].linhas) == 3                  # tabela: uma linha por TAG da malha
     assert '2 malhas' in app.sub_pizza['FVM'].cget('text')     # pizza: cada malha uma vez
-    assert [(r, n) for r, n, _, _ in app.pizzas['FVM'].fatias] == [('Sem status', 2)]   # status vem do outro relatório
-    escolher(monkeypatch, f.status_malhas(tmp_path / 'st.xlsx', [('M1', '1', 'Aprovado'), ('M2', '', '')]))
+    assert [(r, n) for r, n, _, _ in app.pizzas['FVM'].fatias] == [('Sem status', 2)]   # status vem da atualização
+    escolher(monkeypatch, f.lista_fvm(tmp_path / 'lista.xlsx', [('1', 'M1', 'APROVADO'), ('2', 'M9', 'APROVADO')]))
     app.importar_fic('FVM')
-    assert 'relatório filtrado' in app.t_imp.linhas[0]['observacao']
-    assert sorted((r, n) for r, n, _, _ in app.pizzas['FVM'].fatias) == [('Aprovado', 1), ('Sem status', 1)]
+    assert sorted((r, n) for r, n, _, _ in app.pizzas['FVM'].fatias) == [('APROVADO', 1), ('Sem status', 1)]
+    assert {m['malha'] for m in app.R.malhas} == {'M1', 'M2'}  # M9 não está na FVM BASE: só na Verificação

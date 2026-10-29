@@ -20,7 +20,7 @@ comissionamento/texto.py     TRIM e comparação sem caixa (equivalentes ao Exce
 comissionamento/padroes.py   critérios padrão e listas oficiais de status (semeiam o banco novo)
 comissionamento/banco.py     esquema SQLite, critérios, parâmetros, log de importações, histórico, backup
 comissionamento/importacao.py leitura das exportações da FIC: Cadastros Básicos (SOP/SSOP; LI antiga também), Cadastro Geral
-                             (FVI), Hierarquia de Malhas e Status de Malhas (FVM), listas de CCM, TAP e TTAS
+                             (FVI), FVM BASE (Hierarquia de Malhas), Lista de FVM, listas de CCM, TAP e TTAS
 comissionamento/calculo.py   reprodução das fórmulas da planilha (IMP_* auxiliares, abas por SSOP/SOP, visão, verificação)
 comissionamento/servico.py   importar -> gravar -> recalcular -> histórico
 comissionamento/exportacao.py relatório Excel + PDF: só Visão Gerencial, FVI, FVM, CCM, TAP, TTAS, com a logo
@@ -57,14 +57,15 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 - Comparações como no Excel: TRIM (só espaço) e sem diferença de maiúsculas.
 - Diferenças deliberadas em relação à planilha: CCM/TAP/TTAS ignoram linhas sem SSOP/SOP **e** sem status (rodapé); linha
   sem número só vale com SSOP/SOP E status (CCMOCULTO); colunas são achadas pelo nome. Sem limites de linhas.
-- FVM = dois relatórios da FIC, ambos em Importar atualização ▸ FVM (reconhecidos pelo cabeçalho; cada um substitui só a
-  sua tabela): Hierarquia de Malhas (tabela fvm: uma linha por TAG/LINHA da malha, com SSOP/SOP; "-" = vazio) e Status de
-  Malhas (tabela fvm_status, tipo FVM_STATUS: malha, Nº FVM, Status da FVM como vem – a DESCRIÇÃO, ex.: "Aprovado").
-  O status vale pelo código ou pela descrição oficial; "Aprovado" é descrição de APRV e de APROVADO → conta se algum dos
-  dois estiver nos Critérios (A CONFIRMAR). Avanço: cada malha uma vez por SSOP. Malha só no relatório de status = sem SSOP.
-  Rodapé do relatório de status (linha "Emissão") é descartado – traz nome do emissor. O relatório vem filtrado por status
-  (ex.: "Status FVM: Aprovado, Cancelado"): o filtro fica na observação da importação. Página FVM: Malha, TAG, SSOP,
-  Status da FVM; busca por malha ou TAG; contador = malhas distintas. Pizza da Visão: cada malha uma vez.
+- FVM (definido pelo usuário em 29/10, 3ª versão): FVM BASE = Relatório de Hierarquia de Malhas (Importar atualização ▸
+  FVM BASE; tipo FVM_BASE, tabela fvm; sem data/histórico): define as malhas, uma linha por TAG/LINHA com SSOP/SOP
+  ("-" = vazio). Atualização FVM = Lista de FVM da FIC (Código FVM, Malha, Status em CÓDIGO; tipo FVM, tabela fvm_status);
+  o Relatório de Status de Malhas (status em descrição) também é aceito. Hierarquia enviada como atualização é recusada;
+  atualização sem FVM BASE é recusada. FVM de malha fora da base NÃO vira linha (vai para a Verificação). Malha com mais de
+  uma FVM: vale a aprovada, senão a última válida, senão a cancelada. Status vale pelo código ou pela descrição oficial.
+  Avanço: cada malha uma vez por SSOP. Rodapé ("Emissão", com o nome do emissor) é descartado. Página FVM: Malha, TAG,
+  SSOP, Status da FVM; busca por malha ou TAG; contador = malhas distintas. Pizza da Visão: cada malha uma vez.
+  Modelo real: 505 malhas na base = 505 FVMs na lista, todas APROVADO.
 - Textos ao usuário sempre por extenso ("FVI Campo II", "FVM Campo III", "TTAS 1"), definidos em rotulos.py e
   usados igualmente na tela e no Excel. Ícones só do conjunto de icones.py (mesmo traço).
 - ci/teste_exe.py abre o .exe por linha de comando E a interface (variável EPC12_TESTE_INICIO); não remover.
@@ -77,7 +78,8 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 - Layout das telas definido pelo usuário (29/10): Visão Gerencial = pizzas FVI, FVM, CCM, TAP, TTAS (nesta ordem, caixas
   iguais); páginas de acompanhamento mostram o STATUS DA FIC como vem no arquivo (o avanço % continua pelos Critérios);
   FVI/FVM sem coluna Situação; TTAS com "Situação TTAS 1/2". Em 29/10 (2ª): botão Importar base removido; um só botão
-  Importar atualização = SOP / SSOP, FVI, FVM, CCM, TAP, TTAS. LI de Itens / LI de Malhas e planilhas-modelo removidas.
+  Importar atualização = SOP / SSOP, FVM BASE | FVI, FVM, CCM, TAP, TTAS. LI de Itens / LI de Malhas e planilhas-modelo
+  removidas.
 - Status exibido por SSOP/SOP (CCM, TAP, TTAS): registro aprovado > último válido do arquivo > cancelado > "Sem registro".
   TTAS: status de etapa 2 (TTAS1 sem TTAS1APROVADO, ou TTAS2) ⇒ coluna TTAS 1 = TTAS1APROVADO (inferência, a confirmar).
 - FVM: uma malha PODE, mas NÃO DEVE, pertencer a mais de uma SSOP – conta em cada SSOP, é destacada e vai para a
@@ -98,7 +100,6 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 6. TAGS SEM FVI por SSOP soma também TAGs canceladas (como a planilha); hoje não há TAG cancelada, sem efeito – confirmar a regra.
 7. Modelos da FIC recebidos em 29/10 (SOP/SSOP, FVI, FVM, CCM, TAP, TTAS) – leitores ajustados e testados com eles.
 8. SOP / SSOP com status PRONTO (11 SSOP no modelo, exatamente as sem CCM): entram no denominador? Hoje entram.
-9. FVM: respondida pelo Relatório de Status de Malhas. Confirmar: "Aprovado" (APRV ou APROVADO?) conta para Campo III e V?
-   E o relatório deve vir sem filtro de status (o modelo veio filtrado em Aprovado, Cancelado).
+9. FVM: resolvida – FVM BASE (hierarquia) + Lista de FVM (status em código).
 10. 5 SSOP do modelo têm SOP fora da lista (incluídos sem descrição) e diluem o % de TAP/TTAS (14 de 19 SOP) – confirmar.
 11. CCMOCULTO: 3 registros com SSOP fora da lista de SOP / SSOP – SSOP removidas ou faltando na lista?

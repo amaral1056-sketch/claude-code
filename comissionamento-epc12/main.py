@@ -1,7 +1,7 @@
 """Ponto de entrada do Controle Gerencial de Comissionamento – EPC 12.
 
 Sem argumentos abre a interface gráfica. Também funciona por linha de comando (automação/conferência):
-  ComissionamentoEPC12.exe --banco C:\\pasta\\epc12.db --li SOP_E_SSOP.xlsx --importar FVI Cadastro.xlsx --exportar relatorio.xlsx
+  ComissionamentoEPC12.exe --banco C:\\pasta\\epc12.db --li SOP_E_SSOP.xlsx --fvm-base FVM_BASE.xlsx --importar FVI Cadastro.xlsx --exportar relatorio.xlsx
   python main.py --importar FVM fvm.xlsx --data 04/11/2026 --exportar rel.xlsx"""
 import argparse
 import sys
@@ -16,6 +16,8 @@ def linha_de_comando(a):
     try:
         if a.li:
             print(servico.importar_li(b, a.li))
+        if a.fvm_base:
+            print(servico.importar_fvm_base(b, a.fvm_base))
         for arq in a.status or []:
             print('status %s: %d códigos' % servico.importar_status(b, arq))
         for tipo, arq in a.importar or []:
@@ -47,6 +49,7 @@ def main():
     ap = argparse.ArgumentParser(description='Controle Gerencial de Comissionamento – EPC 12')
     ap.add_argument('--banco', help='arquivo do banco de dados (.db)')
     ap.add_argument('--li', help='importar a lista de SOP / SSOP (Lista de Cadastros Básicos da FIC ou LI antiga)')
+    ap.add_argument('--fvm-base', help='importar a FVM BASE (Relatório de Hierarquia de Malhas da FIC)')
     ap.add_argument('--status', nargs='+', help='importar listas oficiais STATUS_*.xlsx')
     ap.add_argument('--importar', nargs=2, action='append', metavar=('TIPO', 'ARQUIVO'),
                     help='importar exportação da FIC: TIPO = FVI, FVM, CCM, TAP ou TTAS')
@@ -54,7 +57,7 @@ def main():
     ap.add_argument('--exportar', help='gerar o relatório Excel neste arquivo (e o PDF com o mesmo nome)')
     ap.add_argument('--versao', action='version', version=__version__)
     a = ap.parse_args()
-    if a.li or a.status or a.importar or a.exportar:
+    if a.li or a.fvm_base or a.status or a.importar or a.exportar:
         sys.exit(linha_de_comando(a))
     from comissionamento import gui
     gui.executar(a.banco)

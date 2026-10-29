@@ -269,7 +269,7 @@ class App(ctk.CTk):
 
     def menu_importar(self):
         """Base SOP / SSOP e atualizações da FIC."""
-        return self._menu([('SOP / SSOP', self.importar_li), None]
+        return self._menu([('SOP / SSOP', self.importar_li), ('FVM BASE', self.importar_fvm_base), None]
                           + [(t, lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_MENU])
 
     def menu_banco(self):
@@ -467,9 +467,9 @@ class App(ctk.CTk):
     def _pg_fvm(self, f):
         d = self.fvm = {'nome': 'FVM', 'ident': ('malha', 'tag'), 'dica_busca': 'Buscar malha ou TAG'}
         self._filtros(f, d)
-        nota(f, 'Uma linha por TAG da malha. TAG e SSOP: Relatório de Hierarquia de Malhas · Status da FVM como vem do '
-                'Relatório de Status de Malhas (importe os dois em Importar atualização ▸ FVM). Malha em mais de uma SSOP '
-                '(pode, mas não deve): linha em cinza e página Verificação.').pack(
+        nota(f, 'Uma linha por TAG da malha. Malhas, TAGs e SSOP: FVM BASE (Relatório de Hierarquia de Malhas) · Nº e status '
+                'da FVM: atualização FVM (Lista de FVM da FIC). Malha em mais de uma SSOP (pode, mas não deve): linha em '
+                'cinza e página Verificação.').pack(
             side='bottom', fill='x', pady=(8, 0))
         d['tabela'] = Tabela(f, rotulos.COL_MALHAS)
         d['tabela'].pack(fill='both', expand=True)
@@ -626,6 +626,19 @@ class App(ctk.CTk):
             self.atualizar()
             self.status_msg(msg)
             messagebox.showinfo('SOP / SSOP importada', msg)
+
+    def importar_fvm_base(self):
+        if not self.banco.tem_base():
+            messagebox.showwarning('Base ausente', 'Importe primeiro a lista de SOP / SSOP (Importar atualização ▸ SOP / SSOP).')
+            return
+        p = filedialog.askopenfilename(title='Selecione a FVM BASE (Relatório de Hierarquia de Malhas da FIC)', filetypes=XLSX)
+        if not p:
+            return
+        msg = self._executar(lambda: servico.importar_fvm_base(self.banco, p))
+        if msg:
+            self.atualizar()
+            self.status_msg(msg)
+            messagebox.showinfo('FVM BASE importada', msg)
 
     def importar_fic(self, tipo):
         if not self.banco.tem_base():
@@ -930,9 +943,10 @@ class App(ctk.CTk):
 
     def ajuda(self):
         messagebox.showinfo('Como usar', (
-            '1. Importar atualização ▸ SOP / SSOP: a Lista de Cadastros Básicos da FIC (uma vez, ou quando mudar).\n'
-            '2. Importar atualização ▸ FVI (Relatório de Cadastro Geral), FVM (Relatório de Hierarquia de Malhas),\n'
-            '   CCM, TAP e TTAS (listas da FIC): os arquivos exportados da FIC, sem editar.\n'
+            '1. Bases (uma vez, ou quando mudarem): Importar atualização ▸ SOP / SSOP (Lista de Cadastros Básicos)\n'
+            '   e ▸ FVM BASE (Relatório de Hierarquia de Malhas).\n'
+            '2. Atualizações: FVI (Relatório de Cadastro Geral), FVM (Lista de FVM), CCM, TAP e TTAS (listas da FIC):\n'
+            '   os arquivos exportados da FIC, sem editar.\n'
             '3. Confirme a data de referência: o avanço fica registrado no Histórico nessa data.\n'
             '4. Confira a página Verificação (os testes devem resultar OK) antes de apresentar.\n'
             '5. Exportar Excel e PDF gera o relatório para envio: Visão Gerencial, FVI, FVM, CCM, TAP e TTAS, com a logo.\n\n'

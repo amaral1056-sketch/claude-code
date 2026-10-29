@@ -22,7 +22,8 @@ comissionamento e é alimentado pelas **planilhas Excel** exportadas da FIC. Con
    |---|---|---|
    | **SOP / SSOP** | Lista de Cadastros Básicos (Código, Descrição, Tipo) | base mestre; importe primeiro. Unidade e SOP de cada SSOP vêm do código |
    | **FVI** | Relatório de Cadastro Geral | por TAG |
-   | **FVM** | Relatório de Hierarquia de Malhas **e** Relatório de Status de Malhas | importe os dois (um de cada vez): a hierarquia dá as TAGs e a SSOP de cada malha, o relatório de status dá o Nº e o status da FVM. Exporte o de status sem filtro de status |
+   | **FVM BASE** | Relatório de Hierarquia de Malhas | base das FVMs: as malhas, suas TAGs e a SSOP de cada uma; importe antes da FVM |
+   | **FVM** | Lista de FVM | atualização: Nº e status da FVM de cada malha da base |
    | **CCM** | Lista de CCM | por SSOP (inclui registros sem número, ex.: CCMOCULTO) |
    | **TAP** | Lista de TAP | por SOP (o número do TAP é "TAP-" + SOP) |
    | **TTAS** | Lista de TTAS | por SOP |
@@ -59,7 +60,7 @@ Cada importação substitui a anterior do mesmo tipo (a FIC exporta sempre a lis
 
 ### Linha de comando (automação)
 ```
-ComissionamentoEPC12.exe --banco epc12.db --li SOP_E_SSOP.xlsx --status STATUS_*.xlsx --importar FVI FVI.xlsx --importar FVM FVM.xlsx --importar TAP TAP.xlsx --exportar relatorio.xlsx
+ComissionamentoEPC12.exe --banco epc12.db --li SOP_E_SSOP.xlsx --fvm-base FVM_BASE.xlsx --status STATUS_*.xlsx --importar FVI FVI.xlsx --importar FVM FVM.xlsx --importar TAP TAP.xlsx --exportar relatorio.xlsx
 ```
 
 ## Desenvolvimento

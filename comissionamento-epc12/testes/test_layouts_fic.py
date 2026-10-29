@@ -55,23 +55,30 @@ def test_hierarquia_de_malhas(banco, tmp_path):
         ('M2', 'PRONTO', [('TAG', 'T2', f.S1, f.P1), ('TAG', 'T3', f.S2, f.P2)]),     # pode, mas não deve
         ('M3', 'OPERAÇÃO', []),                                                       # sem TAG/linha: sem SSOP
     ])
-    regs, data, info = servico.importar_fic(banco, 'FVM', p)
-    assert data == '2026-10-29' and info['malhas'] == 3 and len(info['linhas_ignoradas']) == 2   # rodapé
+    with pytest.raises(ErroImportacao, match='FVM BASE'):    # a hierarquia é base, não atualização
+        servico.importar_fic(banco, 'FVM', p, '29/10/2026')
+    assert servico.importar_fvm_base(banco, p) == 'FVM BASE importada: 3 malhas, 5 TAG(s)/linha(s), 2 SSOP.'
+    regs = banco.dados('FVM_BASE')
     assert [(r['malha'], r['tag'], r['ssop']) for r in regs] == [       # uma linha por TAG/linha da malha
         ('M1', 'T1', f.S1), ('M1', 'L1', f.S1), ('M2', 'T2', f.S1), ('M2', 'T3', f.S2), ('M3', '', '')]
-    # status da FVM pelo Relatório de Status de Malhas: "Aprovado" é a descrição oficial (APRV / APROVADO)
-    servico.importar_fic(banco, 'FVM', f.status_malhas(tmp_path / 'st.xlsx', [
-        ('M1', '10', 'Aprovado'), ('M2', '11', 'Cancelado'), ('M3', '', ''), ('M9', '12', 'Aprovado')]))
-    assert len(banco.dados('FVM')) == 5                      # a hierarquia não foi substituída
+    # atualização pela Lista de FVM (status em código); M1 com duas FVMs: vale a aprovada
+    lista = f.lista_fvm(tmp_path / 'lista.xlsx', [('10', 'M1', 'APROVADO'), ('11', 'M2', 'CANCEL'), ('12', 'M9', 'APROVADO'),
+                                                   ('13', 'M1', 'LIBEXEC')])
+    _, data, _ = servico.importar_fic(banco, 'FVM', lista, '29/10/2026')
+    assert data == '2026-10-29' and len(banco.dados('FVM_BASE')) == 5     # a base não foi substituída
     R = servico.calcular(banco)
     s1 = next(s for s in R.ssop if s['ssop'] == f.S1)
     assert (s1['malhas'], s1['fvm_ciii'], s1['fvm_cv']) == (1, 1, 1)   # M1 conta uma vez; M2 cancelada fica fora
-    assert next(m for m in R.malhas if m['malha'] == 'M9')['situacao'] == 'SEM SSOP'   # só no relatório de status
+    m1 = next(m for m in R.malhas if m['malha'] == 'M1')
+    assert (m1['n_fvm'], m1['status']) == ('10', 'APROVADO')
+    assert 'M9' not in {m['malha'] for m in R.malhas}                  # fora da FVM BASE: não vira linha
     v = {t: a for _, t, _, a, _ in R.verificacao}
     assert v['FVM – malhas em mais de uma SSOP (pode, mas não deve)'] == 1
     assert v['FVM – status com código desconhecido'] == 0
-    assert v['FVM – malhas do Relatório de Status que não estão na Hierarquia de Malhas (sem SSOP)'] == 1
-    assert v['FVM – registros sem SSOP'] == 2                # M3 (sem TAG) e M9
+    assert v['FVM – FVMs de malhas que não estão na FVM BASE'] == 1
+    assert v['FVM – malhas com mais de uma FVM na atualização'] == 1
+    assert v['FVM – malhas da FVM BASE sem FVM na atualização'] == 1   # M3
+    assert v['FVM – registros sem SSOP'] == 1                         # M3 (sem TAG)
 
 
 def test_ccm_sem_numero_conta_pelo_ssop(banco, tmp_path):
