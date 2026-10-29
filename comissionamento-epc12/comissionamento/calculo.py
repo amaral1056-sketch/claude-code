@@ -5,6 +5,7 @@ Referência de cada regra (planilha original, scripts/02_estrutura.py):
 - IMP_FVM/IMP_CCM/IMP_TAP/IMP_TTAS: VALIDO, *_OK, FORA_DA_BASE, COD_DESCONHECIDO;
 - abas FVI/FVM/CCM/TAP (por SSOP e SOP), TTAS (por SOP), VISAO_GERENCIAL (por unidade, totais ponderados), VERIFICACAO.
 Comparações seguem o Excel: TRIM e sem diferença de maiúsculas/minúsculas (ver texto.py)."""
+import json
 from collections import defaultdict
 
 from .texto import chave
@@ -27,6 +28,8 @@ class Resultado:
         self.total = {}             # linha TOTAL da visão gerencial
         self.verificacao = []       # (grupo, teste, esperado, apurado, resultado)
         self.pendencias = []        # (documento, linha do arquivo, identificação, SSOP/SOP, problema)
+        self.tags = []              # uma linha por TAG lida do cadastro, com o status de cada campo
+        self.malhas = []            # uma linha por malha lida da FVM
         self.contagens = {}         # números brutos (TAGs lidas etc.)
 
     def historico_por_unidade(self):
@@ -35,6 +38,16 @@ class Resultado:
                 'malhas': 'malhas', 'fvm_ciii': 'fvm_ciii', 'fvm_cv': 'fvm_cv', 'ccm': 'ccm', 'tap': 'tap',
                 'ttas1': 'ttas1', 'ttas2': 'ttas2', 'tags_sem_fvi': 'tags_sem_fvi'}
         return {v['unidade']: {k: v[c] for k, c in cols.items()} for v in self.visao}
+
+
+def _descricao(dados):
+    """Descrição da TAG guardada no JSON da linha do cadastro."""
+    if isinstance(dados, str):
+        try:
+            dados = json.loads(dados)
+        except ValueError:
+            return ''
+    return (dados or {}).get('DESCRIÇÃO DO TAG', '')
 
 
 def _conjuntos(criterios, status_fic):
@@ -58,6 +71,7 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
     zeros = ('tags', 'cii_aplic', 'cii_aprov', 'ciii_aplic', 'ciii_aprov', 'cv_aplic', 'cv_aprov', 'tags_sem_fvi',
              'malhas', 'fvm_ciii', 'fvm_cv', 'ccm_reg', 'ccm_ok', 'tap_reg', 'tap_ok')
     acc = {chave(s['ssop']): dict.fromkeys(zeros, 0) for s in ssops}
+    base_ssop = {chave(s['ssop']): s for s in ssops}
     pend = R.pendencias
     cont = R.contagens
 
@@ -74,6 +88,18 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
         sem_fvi = chave(t['n_fvi']) == ''
         n['canceladas'] += not valido
         n['sem_fvi'] += sem_fvi
+        ref = base_ssop.get(k)
+        rec = {'linha': t['linha'], 'tag': t['tag'], 'descricao': _descricao(t.get('dados')),
+               'unidade': ref['unidade'] if ref else t['unidade'], 'sop': ref['sop'] if ref else t['sop'],
+               'ssop': t['ssop'], 'classe': t['classe'], 'n_fvi': t['n_fvi'], 'sem_fvi': sem_fvi,
+               'st_fvi': t['st_fvi'], 'st_civ': t['st_civ'],
+               'situacao': 'CANCELADA' if not valido else ('SEM SSOP' if k == '' else ('FORA DA BASE' if ref is None else 'VÁLIDA'))}
+        for campo, col, etapa in CAMPOS_FVI:
+            st = chave(t[col])
+            rec['st_' + campo] = t[col]
+            # True = conta como aprovado · False = pendente · None = N/A ou TAG cancelada
+            rec['ok_' + campo] = None if (not valido or st == 'N/A') else (st != '' and st in crit[etapa])
+        R.tags.append(rec)
         unk = sum(desconhecido('FVI', t[c]) for c in ('st_fvi', 'st_cii', 'st_ciii', 'st_civ', 'st_cv'))
         if unk:
             n['desconhecido'] += unk
@@ -127,6 +153,16 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
                 yield acc[k], st
         cont[doc] = m
 
+    for r in dados.get('FVM', []):
+        k, st = chave(r['ssop']), chave(r['status'])
+        ref = base_ssop.get(k)
+        valido = st not in canc or st == ''
+        R.malhas.append({
+            'linha': r['linha'], 'malha': r['malha'], 'unidade': ref['unidade'] if ref else '',
+            'sop': ref['sop'] if ref else r['sop'], 'ssop': r['ssop'], 'status': r['status'],
+            'ok_ciii': (st != '' and st in crit['FVM_CIII']) if valido else None,
+            'ok_cv': (st != '' and st in crit['FVM_CV']) if valido else None,
+            'situacao': 'CANCELADA' if not valido else ('SEM SSOP' if k == '' else ('FORA DA BASE' if ref is None else 'VÁLIDA'))})
     for a, st in por_ssop('FVM', dados.get('FVM', []), 'malha', 'FVM', True):
         a['malhas'] += 1
         a['fvm_ciii'] += st != '' and st in crit['FVM_CIII']

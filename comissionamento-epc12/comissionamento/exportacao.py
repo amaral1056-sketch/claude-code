@@ -40,6 +40,21 @@ COL_TAP = _SSOP + [('TAP REGISTRADOS', 'tap_reg', 12, 0), ('CONCLUÍDO', 'tap_co
 COL_TTAS = _SOP + [('TTAS REGISTRADOS', 'ttas_reg', 12, 0), ('TTAS1 APROVADO', 'ttas1_aprovado', 12, 0),
                    ('TTAS2 APROVADO', 'ttas2_aprovado', 12, 0), ('SITUAÇÃO', 'ttas_situacao', 18, 0)]
 
+COL_TAGS_XLS = [('TAG', 'tag', 20, 0), ('DESCRIÇÃO', 'descricao', 34, 0), ('UNIDADE', 'unidade', 10, 0),
+                ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 28, 0), ('CLASSE', 'classe', 30, 0), ('Nº FVI', 'n_fvi', 10, 0),
+                ('STATUS FVI', 'st_fvi', 13, 0), ('STATUS CAMPO II', 'st_cii', 14, 0), ('CII CONTA?', 'x_cii', 9, 0),
+                ('STATUS CAMPO III', 'st_ciii', 14, 0), ('CIII CONTA?', 'x_ciii', 9, 0), ('STATUS CAMPO IV', 'st_civ', 13, 0),
+                ('STATUS CAMPO V', 'st_cv', 14, 0), ('CV CONTA?', 'x_cv', 9, 0), ('SITUAÇÃO', 'situacao', 14, 0),
+                ('SEM FVI', 'x_sem_fvi', 8, 0)]
+COL_MALHAS_XLS = [('MALHA', 'malha', 22, 0), ('UNIDADE', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 28, 0),
+                  ('STATUS', 'status', 16, 0), ('CAMPO III ATINGIDO?', 'x_ciii', 12, 0),
+                  ('CAMPO V ATINGIDO?', 'x_cv', 12, 0), ('SITUAÇÃO', 'situacao', 14, 0)]
+
+
+def _sim_nao(v):
+    return 'N/A' if v is None else ('SIM' if v else 'NÃO')
+
+
 NOTAS_VISAO = [
     '% FVI = aprovados ÷ aplicáveis (N/A e cancelados fora do denominador). % FVM = aprovadas ÷ malhas válidas.',
     '% CCM e % TAP = SSOP com documento aprovado/concluído ÷ total de SSOP da unidade. % TTAS = SOP com TTAS1/TTAS2 aprovado ÷ total de SOP.',
@@ -100,6 +115,16 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
             _tabela(ws, cols, linhas, col0=col0)
             col0 += len(cols) + 1
         ws.freeze_panes = 'E2'
+
+    ws = wb.create_sheet('TAGS_FVI')
+    _tabela(ws, COL_TAGS_XLS, [{**t, 'x_cii': _sim_nao(t['ok_cii']), 'x_ciii': _sim_nao(t['ok_ciii']),
+                                 'x_cv': _sim_nao(t['ok_cv']), 'x_sem_fvi': 'SIM' if t['sem_fvi'] else ''} for t in R.tags])
+    ws.freeze_panes = 'B2'
+    ws.auto_filter.ref = f'A1:{L(len(COL_TAGS_XLS))}{len(R.tags) + 1}'
+    ws = wb.create_sheet('MALHAS_FVM')
+    _tabela(ws, COL_MALHAS_XLS, [{**m, 'x_ciii': _sim_nao(m['ok_ciii']), 'x_cv': _sim_nao(m['ok_cv'])} for m in R.malhas])
+    ws.freeze_panes = 'B2'
+    ws.auto_filter.ref = f'A1:{L(len(COL_MALHAS_XLS))}{len(R.malhas) + 1}'
 
     ws = wb.create_sheet('VERIFICACAO')
     cols = [('GRUPO', 'g', 12, 0), ('TESTE', 't', 70, 0), ('ESPERADO', 'e', 10, 0), ('APURADO', 'a', 10, 0), ('RESULTADO', 'r', 12, 0)]

@@ -107,8 +107,12 @@ def test_relatorio_excel_e_backup(banco, tmp_path):
     destino = tmp_path / 'rel.xlsx'
     exportacao.exportar_relatorio(R, destino, '28/10/2026', servico.historico_com_percentuais(banco), banco.criterios())
     wb = openpyxl.load_workbook(destino)
-    assert wb.sheetnames == ['VISAO_GERENCIAL', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS', 'VERIFICACAO', 'PENDENCIAS',
-                             'HISTORICO', 'CRITERIOS']
+    assert wb.sheetnames == ['VISAO_GERENCIAL', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS', 'TAGS_FVI', 'MALHAS_FVM',
+                             'VERIFICACAO', 'PENDENCIAS', 'HISTORICO', 'CRITERIOS']
+    tags = list(wb['TAGS_FVI'].iter_rows(min_row=2, values_only=True))
+    assert len(tags) == 10
+    t1 = next(r for r in tags if r[0] == 'T1')
+    assert (t1[8], t1[9], t1[10], t1[11], t1[15]) == ('APROVADO', 'SIM', 'ACAMPO5', 'SIM', 'VÁLIDA')
     vg = wb['VISAO_GERENCIAL']
     assert [vg.cell(r, 1).value for r in (5, 6, 7)] == [f.UN1, f.UN2, 'TOTAL']
     assert vg.cell(7, 5).value == pytest.approx(4 / 6)

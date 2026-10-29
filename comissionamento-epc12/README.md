@@ -17,7 +17,12 @@ comissionamento e é alimentado pelas **planilhas Excel** exportadas da FIC. Con
    O programa lê a data de emissão do rodapé e pede confirmação – é a data em que o avanço fica no **Histórico**.
 4. **FVM, CCM, TAP, TTAS**: layout ainda provisório; as colunas são achadas pelo **nome do cabeçalho**
    (*Arquivo > Exportar planilhas-modelo* mostra o formato: `MALHA | SOP | SSOP | STATUS`, `Nº CCM | SSOP | STATUS`, …).
-5. Confira a aba **Verificação** (testes devem dar OK; pendências linha a linha) e use **Arquivo > Exportar relatório Excel**.
+5. **Painel**: indicadores (TAGs, FVI Campos II/III/V, FVM, CCM, TAP, TTAS) e gráficos – avanço por unidade,
+   situação das TAGs por campo, evolução no histórico e documentos por unidade (passe o mouse para ver os valores).
+6. **FVI**: veja **TAG a TAG** (SSOP, Nº FVI e status de cada campo: ✔ conta como aprovado · ○ pendente · — N/A),
+   ou agrupado por SSOP/SOP; filtre por unidade, situação (pendentes, sem FVI, canceladas…) e busca.
+   Duplo clique numa SSOP abre as TAGs dela. **FVM**: o mesmo, malha a malha.
+7. Confira a página **Verificação** (testes devem dar OK; pendências linha a linha) e use **Exportar Excel** (inclui abas TAGS_FVI e MALHAS_FVM com o status de cada campo).
 
 Cada importação substitui a anterior do mesmo tipo (a FIC exporta sempre a lista completa) e fica registrada na aba
 **Importações**. Critérios de "aprovado" e o parâmetro *TAGs sem FVI no denominador* são editáveis na aba **Critérios**.

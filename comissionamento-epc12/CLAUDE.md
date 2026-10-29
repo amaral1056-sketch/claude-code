@@ -23,7 +23,9 @@ comissionamento/importacao.py leitura da LI, do Relatório de Cadastro Geral e d
 comissionamento/calculo.py   reprodução das fórmulas da planilha (IMP_* auxiliares, abas por SSOP/SOP, visão, verificação)
 comissionamento/servico.py   importar -> gravar -> recalcular -> histórico
 comissionamento/exportacao.py relatório Excel (valores formatados) e planilhas-modelo
-comissionamento/gui.py       interface Tkinter
+comissionamento/gui.py       interface Tkinter (barra lateral, Painel, FVI/FVM TAG a TAG e malha a malha, …)
+comissionamento/tema.py      paleta suave e estilos ttk (tema clam); cores de série validadas p/ daltonismo (3 cores)
+comissionamento/graficos.py  gráficos em tk.Canvas (colunas, barras 100%, linhas, medidor) com dica ao passar o mouse
 testes/                      sintético (12 casos de borda à mão), importação, interface, dados reais (pulado sem dados/)
 ci/teste_exe.py              testa o .exe gerado; .github/workflows/comissionamento-windows.yml gera o .exe no Windows
 ```
@@ -42,6 +44,7 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 - Comparações como no Excel: TRIM (só espaço) e sem diferença de maiúsculas.
 - Diferenças deliberadas em relação à planilha: FVM/CCM/TAP/TTAS ignoram linhas sem SSOP/SOP **e** sem status (rodapé) e
   contam "registros sem SSOP" à parte; colunas são achadas pelo nome. Sem limites de linhas (a planilha tinha 10.000 no FVI).
+- Gráficos: no máximo 3 séries por gráfico (paleta validada só até 3 cores em todos os pares); legenda sempre visível.
 - Banco: cada importação substitui a anterior do tipo; o histórico guarda contagens por unidade por data de referência.
 
 ## Pendências (perguntas abertas ao usuário)
