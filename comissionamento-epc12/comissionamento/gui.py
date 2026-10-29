@@ -1,4 +1,4 @@
-"""Interface gráfica (Tkinter) do Controle Gerencial de Comissionamento – EPC 12."""
+"""Interface gráfica (CustomTkinter) do Controle Gerencial de Comissionamento – EPC 12."""
 import datetime
 import os
 import traceback
@@ -6,106 +6,133 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from . import __version__, configuracao, exportacao, servico, tema
+import customtkinter as ctk
+from tkinter import font as tkfont
+
+from . import __version__, configuracao, exportacao, rotulos, servico, tema
 from .banco import Banco
-from .graficos import Grafico, Medidor
+from .graficos import Grafico, pct_txt
+from .icones import anel, icone, logo
 from .importacao import ErroImportacao
 from .padroes import ETAPAS
 
 TITULO = 'Controle Gerencial de Comissionamento – EPC 12'
 XLSX = [('Planilhas Excel', '*.xlsx *.xlsm'), ('Todos os arquivos', '*.*')]
 
-# (título, chave, largura em caracteres, é percentual)
-COL_TAGS = [('TAG', 'tag', 17, 0), ('DESCRIÇÃO', 'descricao', 18, 0), ('UNIDADE', 'unidade', 8, 0),
-            ('SSOP', 'ssop', 28, 0), ('Nº FVI', 'n_fvi', 7, 0), ('STATUS FVI', 'st_fvi', 11, 0),
-            ('CAMPO II', 'd_cii', 13, 0), ('CAMPO III', 'd_ciii', 14, 0), ('CAMPO IV', 'st_civ', 9, 0),
-            ('CAMPO V', 'd_cv', 14, 0), ('SITUAÇÃO', 'd_situacao', 11, 0)]
-COL_MALHAS = [('MALHA', 'malha', 20, 0), ('UNIDADE', 'unidade', 9, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 26, 0),
-              ('STATUS', 'status', 16, 0), ('CAMPO III', 'd_ciii', 14, 0), ('CAMPO V', 'd_cv', 14, 0),
-              ('SITUAÇÃO', 'situacao', 14, 0)]
-COL_HIST = [('DATA', 'data', 11, 0), ('UNIDADE', 'unidade', 11, 0), ('TAGS', 'tags', 8, 0), ('% FVI CII', 'pct_cii', 9, 1),
-            ('% FVI CIII', 'pct_ciii', 9, 1), ('% FVI CV', 'pct_cv', 9, 1), ('MALHAS', 'malhas', 8, 0),
-            ('% FVM CIII', 'pct_fvm_ciii', 9, 1), ('% FVM CV', 'pct_fvm_cv', 9, 1), ('% CCM', 'pct_ccm', 8, 1),
-            ('% TAP', 'pct_tap', 8, 1), ('% TTAS1', 'pct_ttas1', 8, 1), ('% TTAS2', 'pct_ttas2', 8, 1),
-            ('TAGS SEM FVI', 'tags_sem_fvi', 9, 0)]
-COL_VER = [('GRUPO', 'g', 10, 0), ('TESTE', 't', 70, 0), ('ESPERADO', 'e', 9, 0), ('APURADO', 'a', 9, 0), ('RESULTADO', 'r', 12, 0)]
-COL_PEND = [('DOCUMENTO', 'd', 10, 0), ('LINHA', 'l', 7, 0), ('IDENTIFICAÇÃO', 'i', 22, 0), ('SSOP / SOP', 's', 28, 0),
-            ('PROBLEMA', 'p', 70, 0)]
-COL_IMP = [('Nº', 'id', 5, 0), ('TIPO', 'tipo', 8, 0), ('IMPORTADO EM', 'importado_em', 18, 0),
-           ('DATA REF.', 'data_br', 10, 0), ('LINHAS', 'linhas', 8, 0), ('ARQUIVO', 'arquivo', 60, 0),
-           ('OBSERVAÇÃO', 'observacao', 50, 0)]
-COL_CRIT = [('ETAPA', 'etapa', 11, 0), ('CÓDIGO', 'codigo', 18, 0), ('ORIGEM', 'origem', 50, 0)]
-COL_STATUS = [('DOC.', 'doc', 6, 0), ('CÓDIGO', 'codigo', 16, 0), ('DESCRIÇÃO', 'descricao', 21, 0)]
-
-SITUACOES_TAG = ('Todas', 'Válidas', 'Com pendência (II, III ou V)', 'Campo II aprovado', 'Sem FVI gerada',
-                 'Canceladas', 'Sem SSOP', 'Fora da base')
-SITUACOES_MALHA = ('Todas', 'Válidas', 'Campo III pendente', 'Campo III atingido', 'Canceladas', 'Sem SSOP', 'Fora da base')
-PAGINAS = ('Painel', 'Visão Gerencial', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS', 'Verificação', 'Histórico', 'Critérios',
-           'Importações')
-ICONES = {'Painel': '◧', 'Visão Gerencial': '▤', 'FVI': '◉', 'FVM': '◎', 'CCM': '◇', 'TAP': '◆', 'TTAS': '▲',
-          'Verificação': '✓', 'Histórico': '↗', 'Critérios': '⚙', 'Importações': '⇣'}
+# página -> (ícone, subtítulo)
+PAGINAS = {
+    'Visão Gerencial': ('visao', 'Avanço do comissionamento por indicador e por unidade'),
+    'FVI': ('fvi', 'Acompanhamento TAG a TAG dos Campos II, III e V da FVI'),
+    'FVM': ('fvm', 'Acompanhamento malha a malha dos Campos III e V da FVM'),
+    'CCM': ('ccm', 'Acompanhamento do CCM por SSOP'),
+    'TAP': ('tap', 'Acompanhamento do TAP por SSOP'),
+    'TTAS': ('ttas', 'Acompanhamento do TTAS 1 e do TTAS 2 por SOP'),
+    'Verificação': ('verificacao', 'Testes das importações e pendências encontradas linha a linha'),
+    'Histórico': ('historico', 'Evolução do avanço em cada data de referência'),
+    'Importações': ('importacoes', 'Registro de todas as importações gravadas neste banco de dados'),
+    'Critérios': ('criterios', 'Quais códigos de status da FIC contam como etapa aprovada'),
+}
+SECOES = [('ACOMPANHAMENTO', ('Visão Gerencial', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS')),
+          ('CONTROLE', ('Verificação', 'Histórico', 'Importações')),
+          ('CONFIGURAÇÃO', ('Critérios',))]
+TODAS_UNIDADES = 'Todas as unidades'
+SITUACOES_TAG = ('Todas as situações', 'Válidas', 'Com pendência em algum campo', 'FVI Campo II aprovado',
+                 'Sem FVI gerada', 'Canceladas', 'Sem SSOP', 'SSOP fora da base')
+SITUACOES_MALHA = ('Todas as situações', 'Válidas', 'FVM Campo III pendente', 'FVM Campo III aprovado',
+                   'Canceladas', 'Sem SSOP', 'SSOP fora da base')
+GRUPO_COR = {'FVI': tema.SERIE[0], 'FVM': tema.SERIE[1], 'DOC': tema.SERIE[2]}
+R_SSOP, R_SOP = 'ssop', 'sop'
 
 
 def fmt(v, percentual):
     if v is None:
         return ''
     if percentual:
-        return f'{v * 100:.1f}%'.replace('.', ',')
+        return pct_txt(v)
     if isinstance(v, float):
         return f'{v:.2f}'.replace('.', ',')
-    if isinstance(v, bool):
-        return 'Sim' if v else 'Não'
     return str(v)
 
 
-def status_campo(texto, ok):
-    """Status de um campo com marca de leitura rápida: ✔ conta como aprovado · ○ pendente · — N/A/cancelada."""
-    t = texto.strip() if texto else ''
-    if ok is None:
-        return f'— {t}' if t else '—'
-    return f'✔ {t}' if ok else f'○ {t or "(vazio)"}'
+def numero(n):
+    return f'{n:,}'.replace(',', '.')
 
 
-def etapa_malha(ok):
-    return '—' if ok is None else ('✔ atingido' if ok else '○ pendente')
+# ====================================================================== componentes
+class Cartao(ctk.CTkFrame):
+    def __init__(self, master, **kw):
+        kw.setdefault('fg_color', tema.SUPERFICIE)
+        kw.setdefault('corner_radius', tema.RAIO)
+        kw.setdefault('border_width', 1)
+        kw.setdefault('border_color', tema.BORDA)
+        super().__init__(master, **kw)
 
 
-class Tabela(ttk.Frame):
-    """Treeview com rolagem, linhas listradas, cabeçalhos clicáveis (ordenar) e % formatado."""
+def titulo_secao(master, texto, sub=''):
+    f = ctk.CTkFrame(master, fg_color='transparent')
+    ctk.CTkLabel(f, text=texto, font=tema.cfonte(16, 'bold'), text_color=tema.TEXTO).pack(anchor='w')
+    if sub:
+        ctk.CTkLabel(f, text=sub, font=tema.cfonte(12), text_color=tema.TEXTO_MUDO).pack(anchor='w')
+    return f
 
-    def __init__(self, master, colunas, altura=20, ao_duplo_clique=None):
-        super().__init__(master, style='Card.TFrame')
+
+def nota(master, texto, largura=1100):
+    return ctk.CTkLabel(master, text=texto, font=tema.cfonte(11), text_color=tema.TEXTO_MUDO, justify='left',
+                        wraplength=largura, anchor='w')
+
+
+def estilo_opcoes():
+    return dict(height=36, corner_radius=10, fg_color=tema.FUNDO, button_color=tema.FUNDO,
+                button_hover_color=tema.BORDA, text_color=tema.TEXTO, font=tema.cfonte(12),
+                dropdown_font=tema.cfonte(12), dynamic_resizing=False)
+
+
+def botao_sec(master, texto, ic, comando, **kw):
+    """Botão secundário (transparente) com ícone padronizado."""
+    return ctk.CTkButton(master, text=texto, image=icone(ic, tema.TEXTO_2), height=kw.pop('height', 36),
+                         corner_radius=10, fg_color='transparent', hover_color=tema.PASSAR, text_color=tema.TEXTO_2,
+                         font=tema.cfonte(12), command=comando, **kw)
+
+
+def botao_pri(master, texto, ic, comando, **kw):
+    """Botão principal (azul) com ícone padronizado."""
+    return ctk.CTkButton(master, text=texto, image=icone(ic, '#FFFFFF'), height=kw.pop('height', 36),
+                         corner_radius=10, fg_color=tema.DESTAQUE, hover_color=tema.DESTAQUE_ESCURO,
+                         text_color='#FFFFFF', font=tema.cfonte(12, 'bold'), command=comando, **kw)
+
+
+class Tabela(Cartao):
+    """Tabela (ttk.Treeview) dentro de um cartão: linhas listradas, cabeçalho clicável para ordenar."""
+
+    def __init__(self, master, colunas, altura=18, ao_duplo_clique=None):
+        super().__init__(master)
         self.colunas = colunas
         ids = [k for _, k, _, _ in colunas]
         self.tree = ttk.Treeview(self, columns=ids, show='headings', height=altura, selectmode='extended')
+        self._f_corpo = tkfont.Font(family=tema.FAMILIA, size=10)
+        self._f_cab = tkfont.Font(family=tema.FAMILIA, size=9, weight='bold')
         for titulo, k, larg, p in colunas:
-            self.tree.heading(k, text=titulo, command=lambda k=k: self.ordenar(k))
-            self.tree.column(k, width=max(48, larg * 7, len(titulo) * 8 + 16), anchor='e' if p else 'w', stretch=larg >= 22)
-        sy = ttk.Scrollbar(self, orient='vertical', command=self.tree.yview)
-        sx = ttk.Scrollbar(self, orient='horizontal', command=self.tree.xview)
+            self.tree.heading(k, text=titulo, anchor='center' if p == 2 else 'w', command=lambda k=k: self.ordenar(k))
+            self.tree.column(k, width=self._f_cab.measure(titulo) + 30, stretch=True)
+        sy = ctk.CTkScrollbar(self, orientation='vertical', command=self.tree.yview, button_color=tema.BORDA_FORTE,
+                              button_hover_color=tema.EIXO, width=12)
+        sx = ctk.CTkScrollbar(self, orientation='horizontal', command=self.tree.xview, button_color=tema.BORDA_FORTE,
+                              button_hover_color=tema.EIXO, height=12)
         self.tree.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
-        self.tree.grid(row=0, column=0, sticky='nsew')
-        sy.grid(row=0, column=1, sticky='ns')
-        sx.grid(row=1, column=0, sticky='ew')
+        self.tree.grid(row=0, column=0, sticky='nsew', padx=(10, 0), pady=(8, 0))
+        sy.grid(row=0, column=1, sticky='ns', padx=(2, 6), pady=(10, 0))
+        sx.grid(row=1, column=0, sticky='ew', padx=(10, 0), pady=(2, 8))
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
-        self.tree.tag_configure('par', background=tema.LISTRA)
-        self.tree.tag_configure('amarelo', background=tema.AMARELO_CRITERIO)
-        self.tree.tag_configure('total', font=tema.fonte(9, 'bold'), background='#EEF3F9')
-        self.tree.tag_configure('alerta', background=tema.ERRO_FUNDO, foreground=tema.ERRO)
-        self.tree.tag_configure('aviso', background=tema.ALERTA_FUNDO)
-        self.tree.tag_configure('mudo', foreground=tema.TEXTO_MUDO)
-        self.tree.tag_configure('ok', foreground=tema.OK)
+        for tag, kw in (('par', {'background': tema.LISTRA}), ('amarelo', {'background': tema.AMARELO_CRITERIO}),
+                        ('total', {'background': tema.DESTAQUE_CLARO, 'font': tema.fonte(10, 'bold')}),
+                        ('alerta', {'background': tema.ERRO_FUNDO, 'foreground': tema.ERRO}),
+                        ('aviso', {'background': tema.ALERTA_FUNDO}), ('mudo', {'foreground': tema.TEXTO_MUDO}),
+                        ('ok', {'foreground': tema.OK})):
+            self.tree.tag_configure(tag, **kw)
         if ao_duplo_clique:
-            self.tree.bind('<Double-1>', lambda e: self._duplo(ao_duplo_clique))
-        self.linhas = []
-        self._tags = None
-        self._ordem = (None, False)
-
-    def _duplo(self, funcao):
-        sel = self.selecionadas()
-        if sel:
-            funcao(sel[0])
+            self.tree.bind('<Double-1>', lambda ev: self.selecionadas() and ao_duplo_clique(self.selecionadas()[0]))
+        self.linhas, self._tags, self._ordem = [], None, (None, False)
 
     def preencher(self, linhas, tags=None):
         self.linhas = list(linhas)
@@ -113,18 +140,21 @@ class Tabela(ttk.Frame):
         self._mostrar()
 
     def _mostrar(self):
-        # coluna só com números (contagens) fica alinhada à direita, como no Excel
-        for _, k, _, p in self.colunas:
-            vals = [r.get(k) for r in self.linhas[:300] if r.get(k) not in (None, '')]
-            numerica = p or (vals and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vals))
-            self.tree.column(k, anchor='e' if numerica else 'w')
+        amostra = self.linhas[:250]
+        for titulo, k, larg, p in self.colunas:
+            vals = [r.get(k) for r in amostra if r.get(k) not in (None, '')]
+            # coluna só de números fica à direita, como no Excel; Sim/Não centralizado
+            numerica = p == 1 or (vals and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vals))
+            # largura pelo conteúdo real (medido com a fonte da tabela), limitada a 'larg' caracteres
+            conteudo = max([self._f_corpo.measure(fmt(v, p == 1)) for v in vals] or [0]) + 20
+            limite = self._f_corpo.measure('n' * larg) + 20
+            largura = max(self._f_cab.measure(titulo) + 26, min(conteudo, limite), 52)
+            self.tree.column(k, anchor='center' if p == 2 else ('e' if numerica else 'w'), width=largura)
         self.tree.delete(*self.tree.get_children())
         for i, r in enumerate(self.linhas):
-            vals = [fmt(r.get(k), p) for _, k, _, p in self.colunas]
             tags = tuple(self._tags(r)) if self._tags else ()
-            if not tags and i % 2:
-                tags = ('par',)
-            self.tree.insert('', 'end', iid=str(i), values=vals, tags=tags)
+            self.tree.insert('', 'end', iid=str(i), values=[fmt(r.get(k), p == 1) for _, k, _, p in self.colunas],
+                             tags=tags or (('par',) if i % 2 else ()))
 
     def ordenar(self, k):
         atual, inv = self._ordem
@@ -132,7 +162,7 @@ class Tabela(ttk.Frame):
         self._ordem = (k, inv)
         fixas = [r for r in self.linhas if r.get('unidade') == 'TOTAL']
         resto = [r for r in self.linhas if r.get('unidade') != 'TOTAL']
-        resto.sort(key=lambda r: (r.get(k) is None, r.get(k) if not isinstance(r.get(k), str) else r.get(k).upper()),
+        resto.sort(key=lambda r: (r.get(k) is None, r.get(k).upper() if isinstance(r.get(k), str) else r.get(k)),
                    reverse=inv)
         self.linhas = resto + fixas
         self._mostrar()
@@ -141,301 +171,356 @@ class Tabela(ttk.Frame):
         return [self.linhas[int(i)] for i in self.tree.selection()]
 
 
-class Indicador(ttk.Frame):
-    """Cartão de indicador: título, valor grande, medidor e linha de apoio."""
+class Indicador(Cartao):
+    """Cartão com anel de progresso, nome do indicador por extenso e o detalhe da conta."""
 
-    def __init__(self, master, titulo, cor=tema.DESTAQUE, medidor=True):
-        super().__init__(master, style='Card.TFrame', padding=(16, 12))
-        ttk.Label(self, text=titulo.upper(), style='Card.TLabel', font=tema.fonte(8, 'bold'),
-                  foreground=tema.TEXTO_MUDO).pack(anchor='w')
-        self.valor = ttk.Label(self, text='–', style='Card.TLabel', font=tema.fonte(20, 'bold'), foreground=tema.TEXTO)
-        self.valor.pack(anchor='w', pady=(2, 4))
-        self.medidor = Medidor(self, cor) if medidor else None
-        if self.medidor:
-            self.medidor.pack(fill='x')
-        self.apoio = ttk.Label(self, text='', style='Card.TLabel', font=tema.fonte(8), foreground=tema.TEXTO_2)
-        self.apoio.pack(anchor='w', pady=(6, 0))
+    def __init__(self, master, titulo, cor):
+        super().__init__(master)
+        self.cor = cor
+        ctk.CTkLabel(self, text=titulo, font=tema.cfonte(14, 'bold'), text_color=tema.TEXTO, anchor='w').pack(
+            fill='x', padx=18, pady=(16, 6))
+        self.anel = ctk.CTkLabel(self, text='–', image=anel(None, cor, tamanho=100, espessura=9), compound='center',
+                                 font=tema.cfonte(17, 'bold'), text_color=tema.TEXTO)
+        self.anel.pack(pady=(2, 6))
+        self.detalhe = ctk.CTkLabel(self, text='', font=tema.cfonte(11), text_color=tema.TEXTO_2, wraplength=180,
+                                    justify='center')
+        self.detalhe.pack(padx=12, pady=(0, 16))
 
-    def definir(self, valor, apoio='', pct=None):
-        self.valor.config(text=valor)
-        self.apoio.config(text=apoio)
-        if self.medidor:
-            self.medidor.definir(pct)
+    def definir(self, valor, detalhe):
+        self.anel.configure(image=anel(valor, self.cor, tamanho=100, espessura=9), text=pct_txt(valor))
+        self.detalhe.configure(text=detalhe)
 
 
-class App(tk.Tk):
+class CartaoGrafico(Cartao):
+    def __init__(self, master, titulo, subtitulo, altura=290):
+        super().__init__(master)
+        self.g = Grafico(self, titulo, subtitulo, altura)
+        self.g.pack(fill='both', expand=True, padx=18, pady=16)
+
+
+# ====================================================================== aplicação
+class App(ctk.CTk):
     def __init__(self, caminho_banco=None):
-        super().__init__()
+        ctk.set_appearance_mode('light')
+        super().__init__(fg_color=tema.FUNDO)
         self.title(TITULO)
-        self.geometry('1360x840')
-        self.minsize(1040, 640)
+        self.geometry('1440x900')
+        self.minsize(1180, 700)
         tema.aplicar(self)
         self.banco = None
         self.R = None
-        self._busca_pendente = None
+        self._agendado = None
         self._montar()
         self.protocol('WM_DELETE_WINDOW', self.sair)
         self.abrir_banco(caminho_banco or configuracao.banco_padrao())
 
-    # ================================================================== montagem
-    def _menu_importar(self, master):
-        m = tk.Menu(master, tearoff=0)
-        m.add_command(label='LI – base SOP/SSOP…', command=self.importar_li)
-        m.add_separator()
-        for t in servico.TIPOS_FIC:
-            m.add_command(label=servico.NOMES[t] + '…', command=lambda t=t: self.importar_fic(t))
-        m.add_separator()
-        m.add_command(label='Listas oficiais de status (STATUS_*.xlsx)…', command=self.importar_status)
+    # ------------------------------------------------------------------ estrutura
+    def _menu(self, itens):
+        m = tk.Menu(self, tearoff=0, bd=0)
+        for item in itens:
+            if item is None:
+                m.add_separator()
+            else:
+                m.add_command(label=item[0], command=item[1])
         return m
 
-    def _montar(self):
-        menu = tk.Menu(self)
-        arq = tk.Menu(menu, tearoff=0)
-        arq.add_command(label='Abrir ou criar banco de dados…', command=self.escolher_banco)
-        arq.add_command(label='Salvar cópia de segurança do banco…', command=self.backup)
-        arq.add_separator()
-        arq.add_command(label='Exportar relatório Excel…', command=self.exportar)
-        arq.add_command(label='Exportar planilhas-modelo (FVM/CCM/TAP/TTAS)…', command=self.exportar_modelos)
-        arq.add_separator()
-        arq.add_command(label='Sair', command=self.sair)
-        menu.add_cascade(label='Arquivo', menu=arq)
-        menu.add_cascade(label='Importar', menu=self._menu_importar(menu))
-        aj = tk.Menu(menu, tearoff=0)
-        aj.add_command(label='Como usar', command=self.ajuda)
-        aj.add_command(label='Sobre', command=lambda: messagebox.showinfo(
-            'Sobre', f'{TITULO}\nVersão {__version__}\n\nBanco de dados: {self.banco.caminho if self.banco else "-"}'))
-        menu.add_cascade(label='Ajuda', menu=aj)
-        self.config(menu=menu)
+    def _abrir_menu(self, botao, menu):
+        menu.tk_popup(botao.winfo_rootx(), botao.winfo_rooty() + botao.winfo_height() + 4)
 
-        # barra lateral
-        lateral = ttk.Frame(self, style='Lateral.TFrame', width=210)
+    def menu_importar(self):
+        return self._menu([('LI – base de SOP e SSOP…', self.importar_li), None]
+                          + [(servico.NOMES[t] + '…', lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_FIC]
+                          + [None, ('Listas oficiais de status (STATUS_*.xlsx)…', self.importar_status)])
+
+    def menu_banco(self):
+        return self._menu([('Abrir ou criar banco de dados…', self.escolher_banco),
+                           ('Salvar cópia de segurança do banco…', self.backup), None,
+                           ('Exportar planilhas-modelo (FVM, CCM, TAP, TTAS)…', self.exportar_modelos)])
+
+    def _montar(self):
+        lateral = ctk.CTkFrame(self, width=252, fg_color=tema.SUPERFICIE, corner_radius=0)
         lateral.pack(side='left', fill='y')
         lateral.pack_propagate(False)
-        ttk.Label(lateral, text='◆ Comissionamento', style='Marca.TLabel').pack(anchor='w', padx=18, pady=(20, 0))
-        ttk.Label(lateral, text='EPC 12 · Controle gerencial', style='LateralNota.TLabel').pack(anchor='w', padx=18, pady=(0, 18))
+        ctk.CTkFrame(self, width=1, fg_color=tema.BORDA, corner_radius=0).pack(side='left', fill='y')
+
+        marca = ctk.CTkFrame(lateral, fg_color='transparent')
+        marca.pack(fill='x', padx=18, pady=(24, 22))
+        img = logo([configuracao.pasta_programa(), configuracao.pasta_programa() / 'dados'])
+        if img:
+            self.logo = ctk.CTkLabel(marca, text='', image=img)
+        else:   # espaço reservado para a logo (coloque logo.png ao lado do programa)
+            self.logo = ctk.CTkLabel(marca, text='LOGO', width=46, height=46, corner_radius=12, fg_color=tema.FUNDO,
+                                     text_color=tema.TEXTO_MUDO, font=tema.cfonte(9, 'bold'))
+        self.logo.pack(side='left')
+        txt = ctk.CTkFrame(marca, fg_color='transparent')
+        txt.pack(side='left', padx=(12, 0))
+        ctk.CTkLabel(txt, text='Comissionamento', font=tema.cfonte(15, 'bold'), text_color=tema.TEXTO).pack(anchor='w')
+        ctk.CTkLabel(txt, text='EPC 12 · Controle gerencial', font=tema.cfonte(10), text_color=tema.TEXTO_MUDO).pack(anchor='w')
+
         self.nav = {}
-        for nome in PAGINAS:
-            b = ttk.Button(lateral, text=f'{ICONES[nome]}   {nome}', style='Nav.TButton', command=lambda n=nome: self.mostrar(n))
-            b.pack(fill='x')
-            self.nav[nome] = b
-        ttk.Label(lateral, text=f'versão {__version__}', style='LateralNota.TLabel').pack(side='bottom', anchor='w', padx=18, pady=12)
+        for secao, paginas in SECOES:
+            ctk.CTkLabel(lateral, text=secao, font=tema.cfonte(10, 'bold'), text_color=tema.TEXTO_MUDO).pack(
+                anchor='w', padx=24, pady=(10, 4))
+            for nome in paginas:
+                b = ctk.CTkButton(lateral, text=nome, image=icone(PAGINAS[nome][0], tema.TEXTO_2), anchor='w',
+                                  compound='left', height=40, corner_radius=10, fg_color='transparent',
+                                  hover_color=tema.PASSAR, text_color=tema.TEXTO_2, font=tema.cfonte(13),
+                                  command=lambda n=nome: self.mostrar(n))
+                b.pack(fill='x', padx=14, pady=1)
+                self.nav[nome] = b
+        self.selo_ver = ctk.CTkLabel(self.nav['Verificação'], text='', height=22, corner_radius=11,
+                                     fg_color=tema.ERRO_FUNDO, text_color=tema.ERRO, font=tema.cfonte(11, 'bold'))
 
-        direita = ttk.Frame(self)
-        direita.pack(side='left', fill='both', expand=True)
+        rod = ctk.CTkFrame(lateral, fg_color='transparent')
+        rod.pack(side='bottom', fill='x', padx=14, pady=(0, 16))
+        self.btn_banco = botao_sec(rod, 'Banco de dados', 'banco', None, anchor='w', height=38)
+        self.btn_banco.configure(command=lambda: self._abrir_menu(self.btn_banco, self.menu_banco()))
+        self.btn_banco.pack(fill='x')
+        self.btn_ajuda = botao_sec(rod, 'Ajuda', 'ajuda', None, anchor='w', height=38)
+        self.btn_ajuda.configure(command=lambda: self._abrir_menu(self.btn_ajuda, self._menu([
+            ('Como usar', self.ajuda), ('Sobre', self.sobre)])))
+        self.btn_ajuda.pack(fill='x')
+        self.lbl_banco = ctk.CTkLabel(rod, text='', font=tema.cfonte(10), text_color=tema.TEXTO_MUDO, anchor='w',
+                                      justify='left', wraplength=210)
+        self.lbl_banco.pack(fill='x', padx=10, pady=(6, 0))
 
-        # cabeçalho
-        topo = ttk.Frame(direita, style='Topo.TFrame', padding=(24, 14))
-        topo.pack(fill='x')
-        textos = ttk.Frame(topo, style='Topo.TFrame')
-        textos.pack(side='left')
-        self.lbl_pagina = ttk.Label(textos, text='Painel', style='TopoTitulo.TLabel')
+        # área principal
+        principal = ctk.CTkFrame(self, fg_color='transparent')
+        principal.pack(side='left', fill='both', expand=True)
+        topo = ctk.CTkFrame(principal, fg_color='transparent')
+        topo.pack(fill='x', padx=26, pady=(24, 12))
+        txt = ctk.CTkFrame(topo, fg_color='transparent')
+        txt.pack(side='left')
+        self.lbl_pagina = ctk.CTkLabel(txt, text='', font=tema.cfonte(26, 'bold'), text_color=tema.TEXTO)
         self.lbl_pagina.pack(anchor='w')
-        self.lbl_info = ttk.Label(textos, text='', style='TopoSub.TLabel')
-        self.lbl_info.pack(anchor='w')
-        ttk.Button(topo, text='Exportar Excel', command=self.exportar).pack(side='right', padx=(8, 0))
-        mb = ttk.Menubutton(topo, text='Importar planilha', style='Destaque.TMenubutton')
-        mb['menu'] = self._menu_importar(mb)
-        mb.pack(side='right')
-        tk.Frame(direita, height=1, background=tema.BORDA).pack(fill='x')
+        self.lbl_sub = ctk.CTkLabel(txt, text='', font=tema.cfonte(13), text_color=tema.TEXTO_MUDO)
+        self.lbl_sub.pack(anchor='w')
+        self.btn_exportar = ctk.CTkButton(topo, text='Exportar Excel', image=icone('exportar', tema.TEXTO_2), height=40,
+                                          corner_radius=10, fg_color=tema.SUPERFICIE, hover_color=tema.PASSAR,
+                                          text_color=tema.TEXTO, border_width=1, border_color=tema.BORDA_FORTE,
+                                          font=tema.cfonte(13), command=self.exportar)
+        self.btn_exportar.pack(side='right')
+        self.btn_importar = botao_pri(topo, 'Importar planilha', 'importar', None, height=40)
+        self.btn_importar.configure(command=lambda: self._abrir_menu(self.btn_importar, self.menu_importar()))
+        self.btn_importar.pack(side='right', padx=10)
+        self.chip_data = ctk.CTkLabel(topo, text='', image=icone('calendario', tema.TEXTO_2), compound='left',
+                                      height=40, corner_radius=10, fg_color=tema.SUPERFICIE, text_color=tema.TEXTO_2,
+                                      font=tema.cfonte(12), padx=14)
+        self.chip_data.pack(side='right')
 
-        self.corpo = ttk.Frame(direita, padding=(20, 16))
-        self.corpo.pack(fill='both', expand=True)
-        self.status = ttk.Label(direita, text='', style='Nota.TLabel', padding=(22, 4))
-        self.status.pack(fill='x', side='bottom')
+        self.corpo = ctk.CTkFrame(principal, fg_color='transparent')
+        self.corpo.pack(fill='both', expand=True, padx=26, pady=(4, 0))
+        self.status = ctk.CTkLabel(principal, text='', font=tema.cfonte(11), text_color=tema.TEXTO_MUDO, anchor='w')
+        self.status.pack(fill='x', padx=34, pady=(4, 10))
 
         self.paginas = {}
-        for nome, montar in (('Painel', self._pg_painel), ('Visão Gerencial', self._pg_visao), ('FVI', self._pg_fvi),
-                             ('FVM', self._pg_fvm), ('CCM', lambda f: self._pg_doc(f, 'CCM', {'SSOP': exportacao.COL_CCM})),
-                             ('TAP', lambda f: self._pg_doc(f, 'TAP', {'SSOP': exportacao.COL_TAP})),
-                             ('TTAS', lambda f: self._pg_doc(f, 'TTAS', {'SOP': exportacao.COL_TTAS})),
+        for nome, montar in (('Visão Gerencial', self._pg_visao), ('FVI', self._pg_fvi), ('FVM', self._pg_fvm),
+                             ('CCM', lambda f: self._pg_doc(f, 'CCM', rotulos.COL_CCM, R_SSOP)),
+                             ('TAP', lambda f: self._pg_doc(f, 'TAP', rotulos.COL_TAP, R_SSOP)),
+                             ('TTAS', lambda f: self._pg_doc(f, 'TTAS', rotulos.COL_TTAS, R_SOP)),
                              ('Verificação', self._pg_verificacao), ('Histórico', self._pg_historico),
-                             ('Critérios', self._pg_criterios), ('Importações', self._pg_importacoes)):
-            f = ttk.Frame(self.corpo)
+                             ('Importações', self._pg_importacoes), ('Critérios', self._pg_criterios)):
+            f = ctk.CTkFrame(self.corpo, fg_color='transparent')
             montar(f)
             self.paginas[nome] = f
         self.pagina_atual = None
-        self.mostrar('Painel')
+        self.mostrar('Visão Gerencial')
 
     def mostrar(self, nome):
         if self.pagina_atual:
             self.paginas[self.pagina_atual].pack_forget()
-            self.nav[self.pagina_atual].configure(style='Nav.TButton')
+            self.nav[self.pagina_atual].configure(fg_color='transparent', text_color=tema.TEXTO_2, font=tema.cfonte(13),
+                                                  image=icone(PAGINAS[self.pagina_atual][0], tema.TEXTO_2))
         self.paginas[nome].pack(fill='both', expand=True)
-        self.nav[nome].configure(style='NavAtivo.TButton')
-        self.lbl_pagina.config(text=nome)
+        self.nav[nome].configure(fg_color=tema.DESTAQUE_CLARO, text_color=tema.DESTAQUE_ESCURO,
+                                 image=icone(PAGINAS[nome][0], tema.DESTAQUE), font=tema.cfonte(13, 'bold'))
+        self.lbl_pagina.configure(text=nome)
+        self.lbl_sub.configure(text=PAGINAS[nome][1])
         self.pagina_atual = nome
 
     # ------------------------------------------------------------------ páginas
-    def _pg_painel(self, f):
-        cards = ttk.Frame(f)
+    def _pg_visao(self, f):
+        sc = self.visao_rolagem = ctk.CTkScrollableFrame(f, fg_color='transparent',
+                                                         scrollbar_button_color=tema.BORDA_FORTE)
+        sc.pack(fill='both', expand=True)
+        self.lbl_visao = ctk.CTkLabel(sc, text='', font=tema.cfonte(12), text_color=tema.TEXTO_MUDO, anchor='w')
+        self.lbl_visao.pack(fill='x', pady=(0, 10))
+        cards = ctk.CTkFrame(sc, fg_color='transparent')
         cards.pack(fill='x')
         self.ind = {}
-        defs = [('tags', 'TAGs válidas', tema.DESTAQUE, False), ('cii', 'FVI · Campo II', tema.SERIE[0], True),
-                ('ciii', 'FVI · Campo III', tema.SERIE[1], True), ('cv', 'FVI · Campo V', tema.SERIE[2], True),
-                ('fvm', 'FVM · Campo III', tema.SERIE[0], True), ('ccm', 'CCM aprovados', tema.SERIE[0], True),
-                ('tap', 'TAP concluídos', tema.SERIE[1], True), ('ttas', 'TTAS1 aprovados', tema.SERIE[2], True)]
-        for i, (k, t, cor, med) in enumerate(defs):
-            c = Indicador(cards, t, cor, med)
-            c.grid(row=i // 4, column=i % 4, sticky='nsew', padx=(0 if i % 4 == 0 else 12, 0), pady=(0, 12))
+        defs = [('cii', 'FVI Campo II', 'FVI'), ('ciii', 'FVI Campo III', 'FVI'), ('cv', 'FVI Campo V', 'FVI'),
+                ('fvm_ciii', 'FVM Campo III', 'FVM'), ('fvm_cv', 'FVM Campo V', 'FVM'), ('ccm', 'CCM', 'DOC'),
+                ('tap', 'TAP', 'DOC'), ('ttas1', 'TTAS 1', 'DOC'), ('ttas2', 'TTAS 2', 'DOC')]
+        for i, (k, t, g) in enumerate(defs):
+            c = Indicador(cards, t, GRUPO_COR[g])
+            c.grid(row=i // 5, column=i % 5, sticky='nsew', padx=(0 if i % 5 == 0 else 14, 0), pady=(0, 14))
             self.ind[k] = c
-        for j in range(4):
-            cards.columnconfigure(j, weight=1, uniform='c')
-        graf = ttk.Frame(f)
-        graf.pack(fill='both', expand=True)
-        self.g_unid = Grafico(graf, 'Avanço do FVI por unidade', 'aprovados ÷ aplicáveis · passe o mouse nas colunas')
-        self.g_sit = Grafico(graf, 'Situação das TAGs por campo', 'TAGs válidas alocadas em SSOP da base')
-        self.g_hist = Grafico(graf, 'Evolução do FVI (total)', 'um ponto por data de referência registrada no histórico')
-        self.g_doc = Grafico(graf, 'Documentos por unidade', '% de SSOP com CCM aprovado / TAP concluído · % de SOP com TTAS1')
-        for i, g in enumerate((self.g_unid, self.g_sit, self.g_hist, self.g_doc)):
-            g.grid(row=i // 2, column=i % 2, sticky='nsew', padx=(0 if i % 2 == 0 else 12, 0), pady=(0 if i < 2 else 12, 0))
-        graf.columnconfigure(0, weight=3, uniform='g')
-        graf.columnconfigure(1, weight=2, uniform='g')
-        graf.rowconfigure(0, weight=1)
-        graf.rowconfigure(1, weight=1)
+        resumo = Cartao(cards)
+        resumo.grid(row=1, column=4, sticky='nsew', padx=(14, 0), pady=(0, 14))
+        ctk.CTkLabel(resumo, text='Base e cadastro', font=tema.cfonte(14, 'bold'), text_color=tema.TEXTO,
+                     anchor='w').pack(fill='x', padx=18, pady=(16, 8))
+        self.resumo = {}
+        for k, t in (('tags', 'TAGs válidas'), ('lidas', 'TAGs lidas no cadastro'), ('sem_fvi', 'TAGs sem FVI gerada'),
+                     ('sem_ssop', 'TAGs sem SSOP'), ('malhas', 'Malhas válidas (FVM)'), ('ssop', 'SSOP na base'),
+                     ('sop', 'SOP na base')):
+            linha = ctk.CTkFrame(resumo, fg_color='transparent')
+            linha.pack(fill='x', padx=18, pady=1)
+            ctk.CTkLabel(linha, text=t, font=tema.cfonte(12), text_color=tema.TEXTO_2).pack(side='left')
+            self.resumo[k] = ctk.CTkLabel(linha, text='–', font=tema.cfonte(12, 'bold'), text_color=tema.TEXTO)
+            self.resumo[k].pack(side='right')
+        for j in range(5):
+            cards.columnconfigure(j, weight=1, uniform='ind')
 
-    def _pg_visao(self, f):
-        self.lbl_visao = ttk.Label(f, text='', style='Sub.TLabel')
-        self.lbl_visao.pack(anchor='w', pady=(0, 8))
-        self.t_visao = Tabela(f, exportacao.COL_VISAO, altura=16)
-        self.t_visao.pack(fill='both', expand=True)
-        for t in exportacao.NOTAS_VISAO:
-            ttk.Label(f, text=t, style='Nota.TLabel').pack(anchor='w')
+        graf = ctk.CTkFrame(sc, fg_color='transparent')
+        graf.pack(fill='x')
+        self.g = {}
+        defs = [('geral', 'Avanço geral', 'Os 9 indicadores do comissionamento (total do empreendimento)'),
+                ('fvi', 'FVI por unidade', 'TAGs aprovadas ÷ TAGs aplicáveis em cada campo'),
+                ('fvm', 'FVM por unidade', 'Malhas aprovadas ÷ malhas válidas em cada campo'),
+                ('ccm', 'CCM e TAP por unidade', 'SSOP com CCM aprovado e com TAP concluído ÷ SSOP da unidade'),
+                ('ttas', 'TTAS por unidade', 'SOP com TTAS 1 e TTAS 2 aprovados ÷ SOP da unidade'),
+                ('evol', 'Evolução geral do FVI', 'Total do empreendimento em cada data de referência do histórico')]
+        for i, (k, t, s) in enumerate(defs):
+            c = CartaoGrafico(graf, t, s, altura=320)
+            c.grid(row=i // 2, column=i % 2, sticky='nsew', padx=(0 if i % 2 == 0 else 14, 0), pady=(0, 14))
+            self.g[k] = c.g
+        graf.columnconfigure(0, weight=1, uniform='g')
+        graf.columnconfigure(1, weight=1, uniform='g')
 
-    def _barra_filtros(self, f, d, niveis, situacoes):
-        barra = ttk.Frame(f)
-        barra.pack(fill='x', pady=(0, 10))
-        d['contagem'] = ttk.Label(barra, text='', style='Sub.TLabel')
-        d['contagem'].pack(side='right')
-        if len(niveis) > 1:
-            seg = ttk.Frame(barra, style='Card.TFrame')
-            seg.pack(side='left', padx=(0, 16))
-            for k in niveis:
-                ttk.Radiobutton(seg, text=k, value=k, variable=d['nivel'], style='Seg.TRadiobutton',
-                                command=lambda: self._trocar_nivel(d)).pack(side='left')
-        ttk.Label(barra, text='Unidade').pack(side='left')
-        d['unidade'] = ttk.Combobox(barra, state='readonly', width=10)
-        d['unidade'].pack(side='left', padx=(6, 14))
-        d['unidade'].bind('<<ComboboxSelected>>', lambda e: self._preencher(d))
+        titulo_secao(sc, 'Avanço por unidade', 'Clique no nome de uma coluna para ordenar').pack(fill='x', pady=(6, 8))
+        self.t_visao = Tabela(sc, rotulos.COL_VISAO, altura=14)
+        self.t_visao.pack(fill='x')
+        for t in rotulos.NOTAS_VISAO:
+            nota(sc, t).pack(fill='x', pady=(4, 0))
+
+    def _filtros(self, f, d, situacoes):
+        barra = Cartao(f)
+        barra.pack(fill='x', pady=(0, 12))
+        dentro = ctk.CTkFrame(barra, fg_color='transparent')
+        dentro.pack(fill='x', padx=14, pady=12)
+        d['unidade'] = ctk.CTkOptionMenu(dentro, values=[TODAS_UNIDADES], width=190,
+                                         command=lambda v: self._preencher(d), **estilo_opcoes())
+        d['unidade'].pack(side='left')
         if situacoes:
-            d['lbl_sit'] = ttk.Label(barra, text='Situação')
-            d['lbl_sit'].pack(side='left')
-            d['situacao'] = ttk.Combobox(barra, state='readonly', width=21, values=situacoes)
-            d['situacao'].set(situacoes[0])
-            d['situacao'].pack(side='left', padx=(6, 14))
-            d['situacao'].bind('<<ComboboxSelected>>', lambda e: self._preencher(d))
-        ttk.Label(barra, text='Buscar').pack(side='left')
-        d['busca'] = tk.StringVar()
-        en = ttk.Entry(barra, textvariable=d['busca'], width=16)
-        en.pack(side='left', padx=6)
-        en.bind('<KeyRelease>', lambda e: self._agendar(d))
-        ttk.Button(barra, text='Limpar', width=8, command=lambda: self._limpar(d)).pack(side='left')
+            d['situacao'] = ctk.CTkOptionMenu(dentro, values=list(situacoes), width=260,
+                                              command=lambda v: self._preencher(d), **estilo_opcoes())
+            d['situacao'].pack(side='left', padx=(10, 0))
+        d['busca'] = ctk.CTkEntry(dentro, placeholder_text=d['dica_busca'], width=300, height=36, corner_radius=10,
+                                  border_width=1, border_color=tema.BORDA, fg_color=tema.FUNDO, font=tema.cfonte(12))
+        d['busca'].pack(side='left', padx=(10, 0))
+        d['busca'].bind('<KeyRelease>', lambda ev: self._agendar(d))
+        botao_sec(dentro, 'Limpar filtros', 'limpar', lambda: self._limpar(d)).pack(side='left', padx=(6, 0))
+        d['contagem'] = ctk.CTkLabel(dentro, text='', height=30, corner_radius=15, fg_color=tema.DESTAQUE_CLARO,
+                                     text_color=tema.DESTAQUE_ESCURO, font=tema.cfonte(12, 'bold'), padx=12)
+        d['contagem'].pack(side='right')
 
     def _pg_fvi(self, f):
-        d = self.fvi = {'nome': 'FVI', 'nivel': tk.StringVar(value='TAGs'), 'tabelas': {}}
-        self._barra_filtros(f, d, ('TAGs', 'SSOP', 'SOP'), SITUACOES_TAG)
-        d['tabelas']['TAGs'] = Tabela(f, COL_TAGS, ao_duplo_clique=None)
-        d['tabelas']['SSOP'] = Tabela(f, exportacao.COL_FVI_SSOP, ao_duplo_clique=lambda r: self._abrir_tags(d, r['ssop']))
-        d['tabelas']['SOP'] = Tabela(f, exportacao.COL_FVI_SOP, ao_duplo_clique=lambda r: self._abrir_nivel(d, 'SSOP', r['sop']))
-        d['nota'] = ttk.Label(f, style='Nota.TLabel', wraplength=1050, text=(
-            '✔ conta como aprovado pelos critérios · ○ pendente · — N/A ou TAG cancelada (fora do denominador).  '
-            'Linhas em amarelo: TAG sem FVI gerada · em vermelho: sem SSOP ou SSOP fora da base · cinza: cancelada.  '
-            'Duplo clique numa SSOP mostra as TAGs dela.'))
-        d['nota'].pack(side='bottom', anchor='w', pady=(6, 0))
-        d['tabelas']['TAGs'].pack(fill='both', expand=True)
+        d = self.fvi = {'nome': 'FVI', 'dica_busca': 'Buscar TAG, SSOP ou descrição'}
+        self._filtros(f, d, SITUACOES_TAG)
+        nota(f, 'Cada campo mostra se conta como aprovado pelos critérios e, entre parênteses, o status da FIC: '
+                '"Aprovado", "Pendente" ou "Não se aplica" (fora da conta). Linhas em amarelo: TAG sem FVI gerada · '
+                'em vermelho: sem SSOP ou SSOP fora da base · em cinza: TAG cancelada.').pack(side='bottom', fill='x', pady=(8, 0))
+        d['tabela'] = Tabela(f, rotulos.COL_TAGS)
+        d['tabela'].pack(fill='both', expand=True)
 
     def _pg_fvm(self, f):
-        d = self.fvm = {'nome': 'FVM', 'nivel': tk.StringVar(value='Malhas'), 'tabelas': {}}
-        self._barra_filtros(f, d, ('Malhas', 'SSOP', 'SOP'), SITUACOES_MALHA)
-        d['tabelas']['Malhas'] = Tabela(f, COL_MALHAS)
-        d['tabelas']['SSOP'] = Tabela(f, exportacao.COL_FVM_SSOP, ao_duplo_clique=lambda r: self._abrir_tags(d, r['ssop']))
-        d['tabelas']['SOP'] = Tabela(f, exportacao.COL_FVM_SOP, ao_duplo_clique=lambda r: self._abrir_nivel(d, 'SSOP', r['sop']))
-        ttk.Label(f, style='Nota.TLabel', wraplength=1050, text=(
-            'Etapa por malha conforme os critérios FVM_CIII e FVM_CV (aba Critérios): ✔ atingido · ○ pendente · — cancelada.  '
-            'Layout da FVM ainda provisório (MALHA | SOP | SSOP | STATUS).  Duplo clique numa SSOP mostra as malhas dela.')
-                  ).pack(side='bottom', anchor='w', pady=(6, 0))
-        d['tabelas']['Malhas'].pack(fill='both', expand=True)
+        d = self.fvm = {'nome': 'FVM', 'dica_busca': 'Buscar malha ou SSOP'}
+        self._filtros(f, d, SITUACOES_MALHA)
+        nota(f, 'Cada campo mostra se conta como aprovado pelos critérios da FVM (página Critérios) e, entre parênteses, '
+                'o status da malha. Layout da planilha de FVM ainda provisório: MALHA | SOP | SSOP | STATUS.').pack(
+            side='bottom', fill='x', pady=(8, 0))
+        d['tabela'] = Tabela(f, rotulos.COL_MALHAS)
+        d['tabela'].pack(fill='both', expand=True)
 
-    def _pg_doc(self, f, nome, opcoes):
-        d = {'nome': nome, 'nivel': tk.StringVar(value=next(iter(opcoes))), 'tabelas': {}}
-        self._barra_filtros(f, d, tuple(opcoes), None)
-        for k, cols in opcoes.items():
-            d['tabelas'][k] = Tabela(f, cols)
-        d['tabelas'][d['nivel'].get()].pack(fill='both', expand=True)
+    def _pg_doc(self, f, nome, colunas, fonte):
+        d = {'nome': nome, 'dica_busca': 'Buscar SOP, SSOP ou descrição', 'fonte': fonte}
+        self._filtros(f, d, None)
+        d['tabela'] = Tabela(f, colunas)
+        d['tabela'].pack(fill='both', expand=True)
         setattr(self, 'doc_' + nome.lower(), d)
 
     def _pg_verificacao(self, f):
-        ttk.Label(f, text='Testes das importações (devem dar OK) e informações', style='Sub.TLabel').pack(anchor='w')
-        self.t_ver = Tabela(f, COL_VER, altura=12)
-        self.t_ver.pack(fill='both', expand=True, pady=(4, 12))
-        ttk.Label(f, text='Pendências encontradas, linha a linha do arquivo importado', style='Sub.TLabel').pack(anchor='w')
-        self.t_pend = Tabela(f, COL_PEND, altura=10)
-        self.t_pend.pack(fill='both', expand=True, pady=(4, 0))
+        titulo_secao(f, 'Testes das importações', 'Os testes devem resultar OK antes de apresentar os números').pack(
+            fill='x', pady=(0, 8))
+        self.t_ver = Tabela(f, rotulos.COL_VER, altura=10)
+        self.t_ver.pack(fill='both', expand=True)
+        titulo_secao(f, 'Pendências encontradas', 'Linha a linha do arquivo importado').pack(fill='x', pady=(14, 8))
+        self.t_pend = Tabela(f, rotulos.COL_PEND, altura=8)
+        self.t_pend.pack(fill='both', expand=True)
 
     def _pg_historico(self, f):
-        barra = ttk.Frame(f)
-        barra.pack(fill='x', pady=(0, 10))
-        ttk.Label(barra, text='Unidade').pack(side='left')
-        self.cb_hist = ttk.Combobox(barra, state='readonly', width=14)
-        self.cb_hist.pack(side='left', padx=(6, 14))
-        self.cb_hist.bind('<<ComboboxSelected>>', lambda e: self._preencher_historico())
-        ttk.Button(barra, text='Registrar situação atual em uma data…', command=self.registrar_historico).pack(side='left')
-        ttk.Button(barra, text='Remover data selecionada', command=self.remover_historico).pack(side='left', padx=8)
-        self.g_hist2 = Grafico(f, 'Evolução', 'FVI Campo II, III e V da seleção', altura=230)
-        self.g_hist2.pack(fill='x', pady=(0, 12))
-        ttk.Label(f, text='Cada importação grava o avanço na data de referência informada (mesma data = substitui).',
-                  style='Nota.TLabel').pack(anchor='w')
-        self.t_hist = Tabela(f, COL_HIST)
+        barra = Cartao(f)
+        barra.pack(fill='x', pady=(0, 12))
+        dentro = ctk.CTkFrame(barra, fg_color='transparent')
+        dentro.pack(fill='x', padx=14, pady=12)
+        self.cb_hist = ctk.CTkOptionMenu(dentro, values=['TOTAL'], width=200,
+                                         command=lambda v: self._preencher_historico(), **estilo_opcoes())
+        self.cb_hist.pack(side='left')
+        botao_pri(dentro, 'Registrar situação atual em uma data', 'mais', self.registrar_historico).pack(side='left', padx=10)
+        botao_sec(dentro, 'Remover data selecionada', 'lixeira', self.remover_historico).pack(side='left')
+        c = CartaoGrafico(f, 'Evolução', 'FVI Campo II, FVI Campo III e FVI Campo V', altura=250)
+        c.pack(fill='x', pady=(0, 12))
+        self.g_hist = c.g
+        self.t_hist = Tabela(f, rotulos.COL_HIST, altura=8)
         self.t_hist.pack(fill='both', expand=True)
-
-    def _pg_criterios(self, f):
-        par = ttk.Frame(f, style='Card.TFrame', padding=(16, 10))
-        par.pack(fill='x', pady=(0, 12))
-        self.var_sem_fvi = tk.StringVar(value='SIM')
-        ttk.Label(par, text='Incluir TAGs sem FVI gerada no denominador do FVI?', style='Card.TLabel',
-                  font=tema.fonte(10, 'bold')).pack(side='left')
-        seg = ttk.Frame(par, style='Card.TFrame')
-        seg.pack(side='left', padx=12)
-        for v in ('SIM', 'NÃO'):
-            ttk.Radiobutton(seg, text=v, value=v, variable=self.var_sem_fvi, style='Seg.TRadiobutton',
-                            command=self.mudar_parametro).pack(side='left')
-        ttk.Label(par, text='SIM = TAG sem FVI conta como pendente (visão conservadora) · NÃO = só TAGs com FVI entram nos %.',
-                  style='Card.TLabel', font=tema.fonte(8), foreground=tema.TEXTO_MUDO).pack(side='left', padx=8)
-        corpo = ttk.Frame(f)
-        corpo.pack(fill='both', expand=True)
-        dir_ = ttk.Frame(corpo)
-        dir_.pack(side='right', fill='y', padx=(16, 0))
-        ttk.Label(dir_, text='Listas oficiais de status da FIC', style='Sub.TLabel').pack(anchor='w')
-        self.t_status = Tabela(dir_, COL_STATUS)
-        self.t_status.pack(fill='both', expand=True, pady=(4, 0))
-        esq = ttk.Frame(corpo)
-        esq.pack(side='left', fill='both', expand=True)
-        ttk.Label(esq, text='Códigos de status que contam como "etapa atingida" (amarelo = a confirmar)',
-                  style='Sub.TLabel').pack(anchor='w')
-        botoes = ttk.Frame(esq)
-        botoes.pack(side='bottom', fill='x', pady=(8, 0))
-        form = ttk.Frame(esq)
-        form.pack(side='bottom', fill='x')
-        self.t_crit = Tabela(esq, COL_CRIT, altura=10)
-        self.t_crit.pack(fill='both', expand=True, pady=(4, 8))
-        for j, t in enumerate(('Etapa', 'Código', 'Origem / justificativa')):
-            ttk.Label(form, text=t, style='Sub.TLabel').grid(row=0, column=j, sticky='w')
-        self.cb_etapa = ttk.Combobox(form, values=ETAPAS, state='readonly', width=12)
-        self.cb_etapa.grid(row=1, column=0, padx=(0, 6))
-        self.cb_codigo = ttk.Combobox(form, width=20)
-        self.cb_codigo.grid(row=1, column=1, padx=(0, 6))
-        self.en_origem = ttk.Entry(form, width=30)
-        self.en_origem.grid(row=1, column=2, padx=(0, 6), sticky='ew')
-        form.columnconfigure(2, weight=1)
-        ttk.Button(form, text='Adicionar', style='Destaque.TButton', command=self.adicionar_criterio).grid(row=1, column=3)
-        ttk.Button(botoes, text='Remover selecionados', command=self.remover_criterio).pack(side='left')
-        ttk.Button(botoes, text='Restaurar critérios padrão', command=self.restaurar_criterios).pack(side='left', padx=8)
+        nota(f, 'Cada importação grava o avanço na data de referência informada; importar de novo na mesma data substitui '
+                'o registro daquela data.').pack(fill='x', pady=(8, 0))
 
     def _pg_importacoes(self, f):
-        ttk.Label(f, text='Registro de todas as importações gravadas neste banco', style='Sub.TLabel').pack(anchor='w')
-        self.t_imp = Tabela(f, COL_IMP)
-        self.t_imp.pack(fill='both', expand=True, pady=(4, 0))
+        self.t_imp = Tabela(f, rotulos.COL_IMP)
+        self.t_imp.pack(fill='both', expand=True)
 
-    # ================================================================== banco
+    def _pg_criterios(self, f):
+        par = Cartao(f)
+        par.pack(fill='x', pady=(0, 12))
+        dentro = ctk.CTkFrame(par, fg_color='transparent')
+        dentro.pack(fill='x', padx=18, pady=14)
+        ctk.CTkLabel(dentro, text='TAGs sem FVI gerada entram no cálculo do FVI?', font=tema.cfonte(13, 'bold'),
+                     text_color=tema.TEXTO).pack(side='left')
+        self.seg_sem_fvi = ctk.CTkSegmentedButton(dentro, values=['Sim', 'Não'], command=lambda v: self.mudar_parametro(),
+                                                  selected_color='#CFE0F8', selected_hover_color='#BBD3F5',
+                                                  unselected_color=tema.FUNDO, unselected_hover_color=tema.BORDA,
+                                                  fg_color=tema.FUNDO, text_color=tema.TEXTO, font=tema.cfonte(12, 'bold'),
+                                                  height=34, width=150, corner_radius=10)
+        self.seg_sem_fvi.pack(side='left', padx=14)
+        ctk.CTkLabel(dentro, text='Sim = TAG sem FVI conta como pendente (visão conservadora). '
+                                  'Não = só TAGs com FVI entram nos percentuais.',
+                     font=tema.cfonte(11), text_color=tema.TEXTO_MUDO).pack(side='left')
+        corpo = ctk.CTkFrame(f, fg_color='transparent')
+        corpo.pack(fill='both', expand=True)
+        dir_ = ctk.CTkFrame(corpo, fg_color='transparent')
+        dir_.pack(side='right', fill='y', padx=(14, 0))
+        titulo_secao(dir_, 'Listas oficiais de status da FIC').pack(fill='x', pady=(0, 8))
+        self.t_status = Tabela(dir_, rotulos.COL_STATUS)
+        self.t_status.pack(fill='both', expand=True)
+        esq = ctk.CTkFrame(corpo, fg_color='transparent')
+        esq.pack(side='left', fill='both', expand=True)
+        titulo_secao(esq, 'Códigos que contam como etapa aprovada',
+                     'Linhas em amarelo: incluídas pela lógica do fluxo da FIC, ainda a confirmar').pack(fill='x', pady=(0, 8))
+        form = Cartao(esq)
+        form.pack(side='bottom', fill='x', pady=(12, 0))
+        fi = ctk.CTkFrame(form, fg_color='transparent')
+        fi.pack(fill='x', padx=14, pady=12)
+        self.cb_etapa = ctk.CTkOptionMenu(fi, values=list(ETAPAS), width=150, **estilo_opcoes())
+        self.cb_etapa.set('Etapa')
+        self.cb_etapa.pack(side='left')
+        self.cb_codigo = ctk.CTkComboBox(fi, values=[], width=190, height=36, corner_radius=10, border_width=1,
+                                         border_color=tema.BORDA, fg_color=tema.FUNDO, button_color=tema.FUNDO,
+                                         button_hover_color=tema.BORDA, font=tema.cfonte(12), dropdown_font=tema.cfonte(12))
+        self.cb_codigo.set('Código de status')
+        self.cb_codigo.pack(side='left', padx=8)
+        self.en_origem = ctk.CTkEntry(fi, placeholder_text='Origem / justificativa', height=36, corner_radius=10,
+                                      border_width=1, border_color=tema.BORDA, fg_color=tema.FUNDO, font=tema.cfonte(12))
+        self.en_origem.pack(side='left', fill='x', expand=True)
+        botao_pri(fi, 'Adicionar', 'mais', self.adicionar_criterio, width=120).pack(side='left', padx=(8, 0))
+        bt = ctk.CTkFrame(form, fg_color='transparent')
+        bt.pack(fill='x', padx=14, pady=(0, 12))
+        botao_sec(bt, 'Remover selecionados', 'lixeira', self.remover_criterio).pack(side='left', padx=(0, 6))
+        botao_sec(bt, 'Restaurar critérios padrão', 'restaurar', self.restaurar_criterios).pack(side='left')
+        self.t_crit = Tabela(esq, rotulos.COL_CRIT, altura=10)
+        self.t_crit.pack(fill='both', expand=True)
+
+    # ------------------------------------------------------------------ banco
     def abrir_banco(self, caminho):
         try:
             novo = Banco(caminho)
@@ -448,7 +533,7 @@ class App(tk.Tk):
         configuracao.lembrar_banco(caminho)
         self.atualizar()
         if not self.banco.tem_base():
-            self.status_msg('Banco novo: comece por Importar planilha ▸ LI – base SOP/SSOP.')
+            self.status_msg('Banco novo: comece por Importar planilha ▸ LI – base de SOP e SSOP.')
 
     def escolher_banco(self):
         p = filedialog.asksaveasfilename(title='Abrir ou criar banco de dados', defaultextension='.db',
@@ -465,9 +550,9 @@ class App(tk.Tk):
         if p:
             self._executar(lambda: self.banco.copiar_para(p), f'Cópia salva em {p}')
 
-    # ================================================================== importações
+    # ------------------------------------------------------------------ importações
     def _executar(self, acao, msg_ok=None):
-        self.config(cursor='watch')
+        self.configure(cursor='watch')
         self.update_idletasks()
         try:
             r = acao()
@@ -479,17 +564,17 @@ class App(tk.Tk):
             messagebox.showerror('Erro', f'{type(e).__name__}: {e}\n\nDetalhes em {configuracao.arquivo_log()}')
             return None
         finally:
-            self.config(cursor='')
+            self.configure(cursor='')
         if msg_ok:
             self.status_msg(msg_ok)
         return r if r is not None else True
 
     def importar_li(self):
-        p = filedialog.askopenfilename(title='Selecione a LI (lista SOP/SSOP)', filetypes=XLSX)
+        p = filedialog.askopenfilename(title='Selecione a LI (lista de SOP e SSOP)', filetypes=XLSX)
         if not p:
             return
         if self.banco.tem_base() and not messagebox.askyesno(
-                'Substituir base', 'A base SOP/SSOP atual será substituída pela desta LI. Continuar?'):
+                'Substituir base', 'A base de SOP e SSOP atual será substituída pela desta LI. Continuar?'):
             return
         msg = self._executar(lambda: servico.importar_li(self.banco, p))
         if msg:
@@ -499,7 +584,7 @@ class App(tk.Tk):
 
     def importar_fic(self, tipo):
         if not self.banco.tem_base():
-            messagebox.showwarning('Base ausente', 'Importe primeiro a LI (Importar planilha ▸ LI – base SOP/SSOP).')
+            messagebox.showwarning('Base ausente', 'Importe primeiro a LI (Importar planilha ▸ LI – base de SOP e SSOP).')
             return
         p = filedialog.askopenfilename(title=f'Selecione o arquivo de {servico.NOMES[tipo]}', filetypes=XLSX)
         if not p:
@@ -524,10 +609,10 @@ class App(tk.Tk):
             extra = f'\nSubstituiu a importação de {anterior["importado_em"]}.' if anterior else ''
             ign = info.get('linhas_ignoradas') or []
             if ign:
-                extra += f'\n{len(ign)} linha(s) ignorada(s) (cabeçalho repetido/rodapé): {", ".join(map(str, ign[:10]))}'
+                extra += f'\n{len(ign)} linha(s) ignorada(s) (cabeçalho repetido ou rodapé): {", ".join(map(str, ign[:10]))}'
             alerta = [t for _, t, _, _, r in self.R.verificacao if r == 'VERIFICAR']
             if alerta:
-                extra += '\n\nAtenção – testes com VERIFICAR (ver Verificação):\n- ' + '\n- '.join(alerta)
+                extra += '\n\nAtenção – testes para verificar (página Verificação):\n- ' + '\n- '.join(alerta)
             messagebox.showinfo('Importação concluída', f'{len(regs)} registro(s) de {tipo} gravados.{extra}')
             self.status_msg(f'{tipo}: {len(regs)} registros importados de {Path(p).name}')
 
@@ -542,7 +627,7 @@ class App(tk.Tk):
             self.atualizar()
             messagebox.showinfo('Listas de status', 'Importadas:\n' + '\n'.join(feitos))
 
-    # ================================================================== exportações
+    # ------------------------------------------------------------------ exportações
     def exportar(self):
         if not self.R:
             return
@@ -564,7 +649,7 @@ class App(tk.Tk):
         if p:
             self._executar(lambda: exportacao.exportar_modelos(p), f'Modelos salvos em {p}')
 
-    # ================================================================== histórico e critérios
+    # ------------------------------------------------------------------ histórico e critérios
     def registrar_historico(self):
         data = simpledialog.askstring('Registrar no histórico', 'Data de referência (dd/mm/aaaa):',
                                       initialvalue=datetime.date.today().strftime('%d/%m/%Y'), parent=self)
@@ -572,8 +657,7 @@ class App(tk.Tk):
             self.atualizar()
 
     def remover_historico(self):
-        sel = self.t_hist.selecionadas()
-        datas = sorted({r['data_referencia'] for r in sel})
+        datas = sorted({r['data_referencia'] for r in self.t_hist.selecionadas()})
         if datas and messagebox.askyesno('Remover', 'Remover do histórico as datas: '
                                          + ', '.join(servico.data_br(d) for d in datas) + '?'):
             for d in datas:
@@ -581,13 +665,13 @@ class App(tk.Tk):
             self.atualizar()
 
     def mudar_parametro(self):
-        self.banco.definir_incluir_sem_fvi(self.var_sem_fvi.get() == 'SIM')
+        self.banco.definir_incluir_sem_fvi(self.seg_sem_fvi.get() == 'Sim')
         self.atualizar()
         self.status_msg('Parâmetro alterado. O histórico já gravado não muda; use "Registrar situação atual" se quiser.')
 
     def adicionar_criterio(self):
         e, c, o = self.cb_etapa.get(), self.cb_codigo.get().strip(), self.en_origem.get().strip()
-        if not e or not c:
+        if e not in ETAPAS or not c:
             messagebox.showwarning('Critério', 'Escolha a etapa e informe o código de status.')
             return
         if self._executar(lambda: self.banco.adicionar_criterio(e, c, o or 'incluído pelo usuário')):
@@ -605,219 +689,187 @@ class App(tk.Tk):
             self.banco.restaurar_criterios()
             self.atualizar()
 
-    # ================================================================== atualização das telas
+    # ------------------------------------------------------------------ atualização
     def atualizar(self):
         b = self.banco
         try:
-            self.R = servico.calcular(b)
+            self.R = rotulos.preparar(servico.calcular(b))
         except Exception:
             configuracao.registrar_erro(traceback.format_exc())
             raise
         R = self.R
         data = servico.data_br(b.data_referencia_atual())
-        self.lbl_info.config(text=f'Data de referência: {data or "–"}   ·   Banco: {b.caminho}')
+        self.chip_data.configure(text=f'Data de referência: {data or "sem importação"}')
+        self.lbl_banco.configure(text=f'{b.caminho.name}\nversão {__version__}')
         self.title(f'{TITULO} – {b.caminho.name}')
-        self.lbl_visao.config(text=f'Avanço por unidade – data de referência {data or "–"}   ·   '
-                                   f'TAGs sem FVI no denominador: {"SIM" if b.incluir_sem_fvi else "NÃO"}')
+        self.lbl_visao.configure(text=f'Data de referência {data or "–"}   ·   TAGs sem FVI gerada entram no cálculo do '
+                                      f'FVI: {"Sim" if b.incluir_sem_fvi else "Não"}')
         self.t_visao.preencher(R.visao + [R.total], lambda r: ('total',) if r['unidade'] == 'TOTAL' else ())
-        self._preparar_linhas()
-        unidades = ['(todas)'] + R.unidades
+        unidades = [TODAS_UNIDADES] + R.unidades
         for d in self._detalhes():
+            d['unidade'].configure(values=unidades)
             if d['unidade'].get() not in unidades:
-                d['unidade'].set('(todas)')
-            d['unidade']['values'] = unidades
+                d['unidade'].set(TODAS_UNIDADES)
             self._preencher(d)
-        self.t_ver.preencher([{'g': g, 't': t, 'e': '-' if e is None else e, 'a': a, 'r': r} for g, t, e, a, r in R.verificacao],
-                             lambda r: ('alerta',) if r['r'] == 'VERIFICAR' else (('ok',) if r['r'] == 'OK' else ()))
+        res = {'OK': 'OK', 'VERIFICAR': 'Verificar', 'INFO': 'Informação'}
+        self.t_ver.preencher([{'g': g, 't': t, 'e': '-' if e is None else e, 'a': a, 'r': res[r]}
+                              for g, t, e, a, r in R.verificacao],
+                             lambda r: ('alerta',) if r['r'] == 'Verificar' else (('ok',) if r['r'] == 'OK' else ()))
         self.t_pend.preencher([dict(zip('dlisp', p)) for p in R.pendencias])
-        self.cb_hist['values'] = ['TOTAL', '(todas)'] + R.unidades
-        if not self.cb_hist.get():
+        self.cb_hist.configure(values=['TOTAL'] + R.unidades)
+        if self.cb_hist.get() not in ['TOTAL'] + R.unidades:
             self.cb_hist.set('TOTAL')
         self._preencher_historico()
-        self.var_sem_fvi.set('SIM' if b.incluir_sem_fvi else 'NÃO')
+        self.seg_sem_fvi.set('Sim' if b.incluir_sem_fvi else 'Não')
         self.t_crit.preencher([{'id': i, 'etapa': e, 'codigo': c, 'origem': o} for i, e, c, o in b.criterios()],
                               lambda r: ('amarelo',) if str(r['origem']).startswith('A CONFIRMAR') else ())
         st = b.status_fic()
         self.t_status.preencher([{'doc': d, 'codigo': c, 'descricao': x} for d, c, x in st])
-        self.cb_codigo['values'] = sorted({c for _, c, _ in st})
+        self.cb_codigo.configure(values=sorted({c for _, c, _ in st}))
         self.t_imp.preencher([{**r, 'data_br': servico.data_br(r['data_referencia'])} for r in b.importacoes()])
         n_alerta = sum(1 for *_, r in R.verificacao if r == 'VERIFICAR')
-        self.nav['Verificação'].configure(text=f'{ICONES["Verificação"]}   Verificação' + (f'   ⚠ {n_alerta}' if n_alerta else ''))
-        self._atualizar_painel()
+        if n_alerta:
+            self.selo_ver.configure(text=f'  {n_alerta}  ')
+            self.selo_ver.place(relx=1.0, x=-10, rely=0.5, anchor='e')
+        else:
+            self.selo_ver.place_forget()
+        self._atualizar_visao()
 
     def _detalhes(self):
         return [self.fvi, self.fvm, self.doc_ccm, self.doc_tap, self.doc_ttas]
 
-    def _preparar_linhas(self):
-        for t in self.R.tags:
-            for c in ('cii', 'ciii', 'cv'):
-                t['d_' + c] = status_campo(t['st_' + c], t['ok_' + c])
-            t['d_situacao'] = 'SEM FVI' if t['situacao'] == 'VÁLIDA' and t['sem_fvi'] else t['situacao']
-        for m in self.R.malhas:
-            m['d_ciii'], m['d_cv'] = etapa_malha(m['ok_ciii']), etapa_malha(m['ok_cv'])
-
-    # ------------------------------------------------------------------ painel
-    def _atualizar_painel(self):
+    def _atualizar_visao(self):
         R, t = self.R, self.R.total
-        p = lambda v: '–' if v is None else f'{v * 100:.1f}%'.replace('.', ',')
-        n_fvi = R.contagens.get('FVI', {})
-        self.ind['tags'].definir(f'{t["tags"]:,}'.replace(',', '.'),
-                                 f'{n_fvi.get("lidas", 0)} lidas · {t["tags_sem_fvi"]} sem FVI · {n_fvi.get("sem_ssop", 0)} sem SSOP')
-        for k in ('cii', 'ciii', 'cv'):
-            self.ind[k].definir(p(t['pct_' + k]), f'{t[k + "_aprov"]} de {t[k + "_aplic"]} aplicáveis', t['pct_' + k])
-        self.ind['fvm'].definir(p(t['pct_fvm_ciii']), f'{t["fvm_ciii"]} de {t["malhas"]} malhas · CV {p(t["pct_fvm_cv"])}',
-                                t['pct_fvm_ciii'])
-        self.ind['ccm'].definir(p(t['pct_ccm']), f'{t["ccm"]} de {t["ssop"]} SSOP', t['pct_ccm'])
-        self.ind['tap'].definir(p(t['pct_tap']), f'{t["tap"]} de {t["ssop"]} SSOP', t['pct_tap'])
-        self.ind['ttas'].definir(p(t['pct_ttas1']), f'{t["ttas1"]} de {t["sop"]} SOP · TTAS2 {p(t["pct_ttas2"])}', t['pct_ttas1'])
+        n = R.contagens.get('FVI', {})
+        detalhes = {
+            'cii': f'{numero(t["cii_aprov"])} de {numero(t["cii_aplic"])} TAGs aplicáveis aprovadas',
+            'ciii': f'{numero(t["ciii_aprov"])} de {numero(t["ciii_aplic"])} TAGs aplicáveis aprovadas',
+            'cv': f'{numero(t["cv_aprov"])} de {numero(t["cv_aplic"])} TAGs aplicáveis aprovadas',
+            'fvm_ciii': f'{numero(t["fvm_ciii"])} de {numero(t["malhas"])} malhas aprovadas',
+            'fvm_cv': f'{numero(t["fvm_cv"])} de {numero(t["malhas"])} malhas aprovadas',
+            'ccm': f'{t["ccm"]} de {t["ssop"]} SSOP com CCM aprovado',
+            'tap': f'{t["tap"]} de {t["ssop"]} SSOP com TAP concluído',
+            'ttas1': f'{t["ttas1"]} de {t["sop"]} SOP com TTAS 1 aprovado',
+            'ttas2': f'{t["ttas2"]} de {t["sop"]} SOP com TTAS 2 aprovado'}
+        for k, det in detalhes.items():
+            self.ind[k].definir(t['pct_' + k], det)
+        for k, v in (('tags', t['tags']), ('lidas', n.get('lidas', 0)), ('sem_fvi', t['tags_sem_fvi']),
+                     ('sem_ssop', n.get('sem_ssop', 0)), ('malhas', t['malhas']), ('ssop', t['ssop']), ('sop', t['sop'])):
+            self.resumo[k].configure(text=numero(v))
 
+        grupo = {'pct_cii': 'FVI', 'pct_ciii': 'FVI', 'pct_cv': 'FVI', 'pct_fvm_ciii': 'FVM', 'pct_fvm_cv': 'FVM'}
+        self.g['geral'].barras_avanco(
+            [(nome, t[k], GRUPO_COR[grupo.get(k, 'DOC')], detalhes[k[4:]]) for k, nome in rotulos.INDICADORES],
+            [('FVI', GRUPO_COR['FVI']), ('FVM', GRUPO_COR['FVM']), ('CCM, TAP e TTAS', GRUPO_COR['DOC'])])
         un = [v['unidade'] for v in R.visao]
-        nomes = (('Campo II', 'cii'), ('Campo III', 'ciii'), ('Campo V', 'cv'))
-        self.g_unid.colunas_agrupadas(
-            un, [(n, tema.SERIE[i], [v['pct_' + k] for v in R.visao]) for i, (n, k) in enumerate(nomes)],
-            rodape=lambda i, j: f'{R.visao[i][nomes[j][1] + "_aprov"]} de {R.visao[i][nomes[j][1] + "_aplic"]} aplicáveis')
-        validas = [x for x in R.tags if x['situacao'] == 'VÁLIDA']
-        cont = {k: [sum(1 for x in validas if x['ok_' + k] is v) for v in (True, False, None)] for _, k in nomes}
-        self.g_sit.barras_empilhadas(
-            [n for n, _ in nomes],
-            [('Aprovadas', tema.SERIE[0], [cont[k][0] for _, k in nomes]),
-             ('Pendentes', tema.SERIE[1], [cont[k][1] for _, k in nomes]),
-             ('N/A', tema.NEUTRO, [cont[k][2] for _, k in nomes])])
+
+        def serie(nome, k, i):
+            return (nome, tema.SERIE[i], [v[k] for v in R.visao])
+
+        def rodape(campos):
+            return lambda i, j: f'{R.visao[i][campos[j][0]]} de {R.visao[i][campos[j][1]]}'
+        self.g['fvi'].colunas_agrupadas(
+            un, [serie('FVI Campo II', 'pct_cii', 0), serie('FVI Campo III', 'pct_ciii', 1), serie('FVI Campo V', 'pct_cv', 2)],
+            rodape([('cii_aprov', 'cii_aplic'), ('ciii_aprov', 'ciii_aplic'), ('cv_aprov', 'cv_aplic')]))
+        self.g['fvm'].colunas_agrupadas(un, [serie('FVM Campo III', 'pct_fvm_ciii', 0), serie('FVM Campo V', 'pct_fvm_cv', 1)],
+                                        rodape([('fvm_ciii', 'malhas'), ('fvm_cv', 'malhas')]))
+        self.g['ccm'].colunas_agrupadas(un, [serie('CCM', 'pct_ccm', 0), serie('TAP', 'pct_tap', 1)],
+                                        rodape([('ccm', 'ssop'), ('tap', 'ssop')]))
+        self.g['ttas'].colunas_agrupadas(un, [serie('TTAS 1', 'pct_ttas1', 0), serie('TTAS 2', 'pct_ttas2', 1)],
+                                         rodape([('ttas1', 'sop'), ('ttas2', 'sop')]))
         hist = [h for h in servico.historico_com_percentuais(self.banco) if h['unidade'] == 'TOTAL']
-        self.g_hist.linhas([h['data'][:5] for h in hist],
-                           [(n, tema.SERIE[i], [h['pct_' + k] for h in hist]) for i, (n, k) in enumerate(nomes)])
-        self.g_doc.colunas_agrupadas(un, [('CCM', tema.SERIE[0], [v['pct_ccm'] for v in R.visao]),
-                                          ('TAP', tema.SERIE[1], [v['pct_tap'] for v in R.visao]),
-                                          ('TTAS1', tema.SERIE[2], [v['pct_ttas1'] for v in R.visao])])
+        self.g['evol'].linhas([h['data'][:5] for h in hist],
+                              [(nome, tema.SERIE[i], [h[k] for h in hist])
+                               for i, (k, nome) in enumerate(rotulos.INDICADORES[:3])])
 
-    # ------------------------------------------------------------------ detalhes (FVI, FVM, CCM, TAP, TTAS)
-    def _trocar_nivel(self, d):
-        for t in d['tabelas'].values():
-            t.pack_forget()
-        d['tabelas'][d['nivel'].get()].pack(fill='both', expand=True)
-        tem_sit = d['nivel'].get() in ('TAGs', 'Malhas')
-        if 'situacao' in d:
-            d['situacao'].configure(state='readonly' if tem_sit else 'disabled')
-        self._preencher(d)
-
+    # ------------------------------------------------------------------ páginas de detalhe
     def _limpar(self, d):
-        d['busca'].set('')
-        d['unidade'].set('(todas)')
+        d['busca'].delete(0, 'end')
+        d['unidade'].set(TODAS_UNIDADES)
         if 'situacao' in d:
-            d['situacao'].set(d['situacao']['values'][0])
+            d['situacao'].set(d['situacao'].cget('values')[0])
         self._preencher(d)
 
     def _agendar(self, d):
-        if self._busca_pendente:
-            self.after_cancel(self._busca_pendente)
-        self._busca_pendente = self.after(250, lambda: self._preencher(d))
-
-    def _abrir_tags(self, d, ssop):
-        d['nivel'].set('TAGs' if d['nome'] == 'FVI' else 'Malhas')
-        if 'situacao' in d:
-            d['situacao'].set(d['situacao']['values'][0])
-        d['busca'].set(ssop)
-        self._trocar_nivel(d)
-
-    def _abrir_nivel(self, d, nivel, filtro):
-        d['nivel'].set(nivel)
-        d['busca'].set(filtro)
-        self._trocar_nivel(d)
+        if self._agendado:
+            self.after_cancel(self._agendado)
+        self._agendado = self.after(250, lambda: self._preencher(d))
 
     def _preencher(self, d):
-        nivel = d['nivel'].get()
         R = self.R
-        if nivel == 'TAGs':
-            linhas, campos = R.tags, ('tag', 'ssop', 'descricao', 'classe', 'n_fvi')
-        elif nivel == 'Malhas':
-            linhas, campos = R.malhas, ('malha', 'ssop', 'sop', 'status')
+        if d['nome'] == 'FVI':
+            linhas, campos, unidade = R.tags, ('tag', 'ssop', 'descricao'), 'TAGs'
+        elif d['nome'] == 'FVM':
+            linhas, campos, unidade = R.malhas, ('malha', 'ssop'), 'malhas'
+        elif d['fonte'] == R_SSOP:
+            linhas, campos, unidade = R.ssop, ('sop', 'ssop', 'descricao'), 'SSOP'
         else:
-            linhas, campos = (R.ssop if nivel == 'SSOP' else R.sop), ('sop', 'ssop', 'descricao')
+            linhas, campos, unidade = R.sop, ('sop', 'descricao'), 'SOP'
         u = d['unidade'].get()
-        if u and u != '(todas)':
+        if u != TODAS_UNIDADES:
             linhas = [r for r in linhas if r.get('unidade') == u]
-        if nivel in ('TAGs', 'Malhas') and 'situacao' in d:
-            linhas = [r for r in linhas if self._filtro_situacao(nivel, d['situacao'].get(), r)]
+        if 'situacao' in d:
+            linhas = [r for r in linhas if self._filtro_situacao(d['situacao'].get(), r)]
         busca = d['busca'].get().strip().upper()
         if busca:
             linhas = [r for r in linhas if any(busca in str(r.get(c) or '').upper() for c in campos)]
-        tags = self._cor_tag if nivel == 'TAGs' else (self._cor_malha if nivel == 'Malhas' else None)
-        d['tabelas'][nivel].preencher(linhas, tags)
-        d['contagem'].config(text=f'{len(linhas):,} {nivel if nivel in ("TAGs", "Malhas") else nivel}'.replace(',', '.'))
+        d['tabela'].preencher(linhas, self._cor_linha if d['nome'] in ('FVI', 'FVM') else None)
+        d['contagem'].configure(text=f'{numero(len(linhas))} {unidade}')
 
     @staticmethod
-    def _filtro_situacao(nivel, sit, r):
-        if sit in ('', 'Todas'):
+    def _filtro_situacao(sit, r):
+        if sit == 'Todas as situações':
             return True
         valida = r['situacao'] == 'VÁLIDA'
-        if sit == 'Válidas':
-            return valida
-        if sit == 'Canceladas':
-            return r['situacao'] == 'CANCELADA'
-        if sit == 'Sem SSOP':
-            return r['situacao'] == 'SEM SSOP'
-        if sit == 'Fora da base':
-            return r['situacao'] == 'FORA DA BASE'
-        if nivel == 'TAGs':
-            if sit == 'Sem FVI gerada':
-                return r['sem_fvi']
-            if sit == 'Campo II aprovado':
-                return valida and r['ok_cii'] is True
-            if sit.startswith('Com pendência'):
-                return valida and any(r['ok_' + c] is False for c in ('cii', 'ciii', 'cv'))
-        else:
-            if sit == 'Campo III pendente':
-                return valida and r['ok_ciii'] is False
-            if sit == 'Campo III atingido':
-                return valida and r['ok_ciii'] is True
-        return True
+        regras = {
+            'Válidas': lambda: valida,
+            'Canceladas': lambda: r['situacao'] == 'CANCELADA',
+            'Sem SSOP': lambda: r['situacao'] == 'SEM SSOP',
+            'SSOP fora da base': lambda: r['situacao'] == 'FORA DA BASE',
+            'Sem FVI gerada': lambda: r.get('sem_fvi', False),
+            'FVI Campo II aprovado': lambda: valida and r['ok_cii'] is True,
+            'Com pendência em algum campo': lambda: valida and any(r['ok_' + c] is False for c in ('cii', 'ciii', 'cv')),
+            'FVM Campo III pendente': lambda: valida and r['ok_ciii'] is False,
+            'FVM Campo III aprovado': lambda: valida and r['ok_ciii'] is True,
+        }
+        return regras.get(sit, lambda: True)()
 
     @staticmethod
-    def _cor_tag(r):
+    def _cor_linha(r):
         if r['situacao'] == 'CANCELADA':
             return ('mudo',)
         if r['situacao'] in ('SEM SSOP', 'FORA DA BASE'):
             return ('alerta',)
-        if r['sem_fvi']:
+        if r.get('sem_fvi'):
             return ('aviso',)
         return ()
 
-    @staticmethod
-    def _cor_malha(r):
-        if r['situacao'] == 'CANCELADA':
-            return ('mudo',)
-        if r['situacao'] in ('SEM SSOP', 'FORA DA BASE'):
-            return ('alerta',)
-        return ()
-
     def _preencher_historico(self):
-        u = self.cb_hist.get()
-        linhas = servico.historico_com_percentuais(self.banco)
-        if u and u != '(todas)':
-            linhas = [r for r in linhas if r['unidade'] == u]
+        u = self.cb_hist.get() or 'TOTAL'
+        linhas = [r for r in servico.historico_com_percentuais(self.banco) if r['unidade'] == u]
         self.t_hist.preencher(linhas, lambda r: ('total',) if r['unidade'] == 'TOTAL' else ())
-        serie = [r for r in linhas if r['unidade'] == (u if u and u != '(todas)' else 'TOTAL')]
-        self.g_hist2.titulo = f'Evolução – {u if u and u != "(todas)" else "TOTAL"}'
-        self.g_hist2.linhas([r['data'] for r in serie],
-                            [(n, tema.SERIE[i], [r['pct_' + k] for r in serie])
-                             for i, (n, k) in enumerate((('Campo II', 'cii'), ('Campo III', 'ciii'), ('Campo V', 'cv')))])
+        self.g_hist.titulo = f'Evolução – {"total do empreendimento" if u == "TOTAL" else u}'
+        self.g_hist.linhas([r['data'] for r in linhas],
+                           [(nome, tema.SERIE[i], [r[k] for r in linhas]) for i, (k, nome) in enumerate(rotulos.INDICADORES[:3])])
 
     def status_msg(self, msg):
-        self.status.config(text=msg)
+        self.status.configure(text=msg)
 
     def ajuda(self):
         messagebox.showinfo('Como usar', (
-            '1. Importar planilha ▸ LI – base SOP/SSOP (uma vez, ou quando a LI for revisada).\n'
+            '1. Importar planilha ▸ LI – base de SOP e SSOP (uma vez, ou quando a LI for revisada).\n'
             '2. Importar planilha ▸ Relatório de Cadastro Geral (FVI): o arquivo exportado da FIC, sem editar.\n'
             '   FVM, CCM, TAP e TTAS: planilhas com cabeçalho reconhecido pelo nome das colunas\n'
-            '   (Arquivo ▸ Exportar planilhas-modelo mostra o formato).\n'
+            '   (Banco de dados ▸ Exportar planilhas-modelo mostra o formato).\n'
             '3. Confirme a data de referência: o avanço fica registrado no Histórico nessa data.\n'
-            '4. Confira a página Verificação (testes devem dar OK) antes de apresentar.\n'
-            '5. Exportar Excel gera a planilha gerencial para envio.\n\n'
-            'FVI: veja TAG a TAG (status de cada campo), por SSOP ou por SOP; duplo clique numa SSOP abre as TAGs dela.\n'
-            'Cada importação substitui a anterior do mesmo tipo (a FIC exporta sempre a lista completa).\n'
-            'Critérios de "aprovado" e o parâmetro de TAGs sem FVI ficam em Critérios.\n'
-            'Faça cópias de segurança do banco em Arquivo ▸ Salvar cópia de segurança.'))
+            '4. Confira a página Verificação (os testes devem resultar OK) antes de apresentar.\n'
+            '5. Exportar Excel gera a planilha gerencial para envio, com as mesmas páginas e gráficos.\n\n'
+            'Visão Gerencial: os 9 indicadores, gráficos e a tabela por unidade.\n'
+            'FVI: cada TAG com a SSOP e a situação dos Campos II, III e V. FVM: cada malha com os Campos III e V.\n'
+            'Para usar a logo da empresa, coloque um arquivo logo.png na mesma pasta do programa.'))
+
+    def sobre(self):
+        messagebox.showinfo('Sobre', f'{TITULO}\nVersão {__version__}\n\nBanco de dados: {self.banco.caminho if self.banco else "-"}')
 
     def sair(self):
         if self.banco:
@@ -837,4 +889,14 @@ def abrir_arquivo(p):
 
 
 def executar(caminho_banco=None):
-    App(caminho_banco).mainloop()
+    app = App(caminho_banco)
+    marca = os.environ.get('EPC12_TESTE_INICIO')
+    if marca:   # usado pelo teste do executável: abre todas as páginas, grava "ok" e fecha
+        def teste():
+            for nome in PAGINAS:
+                app.mostrar(nome)
+                app.update()
+            Path(marca).write_text('ok', encoding='utf-8')
+            app.sair()
+        app.after(1500, teste)
+    app.mainloop()

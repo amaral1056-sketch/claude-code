@@ -6,7 +6,7 @@ Sem argumentos abre a interface gráfica. Também funciona por linha de comando 
 import argparse
 import sys
 
-from comissionamento import __version__, configuracao, exportacao, servico
+from comissionamento import __version__, configuracao, exportacao, rotulos, servico
 from comissionamento.banco import Banco
 from comissionamento.importacao import ErroImportacao
 
@@ -23,9 +23,10 @@ def linha_de_comando(a):
             print(f'{tipo.upper()}: {len(regs)} registros, data de referência {servico.data_br(data)}')
         R = servico.calcular(b)
         t = R.total
-        p = lambda v: '-' if v is None else f'{v * 100:.1f}%'
-        print(f'TOTAL: {t["tags"]} TAGs · FVI CII {p(t["pct_cii"])} · CIII {p(t["pct_ciii"])} · CV {p(t["pct_cv"])} · '
-              f'FVM CIII {p(t["pct_fvm_ciii"])} · CCM {p(t["pct_ccm"])} · TAP {p(t["pct_tap"])} · TTAS1 {p(t["pct_ttas1"])}')
+        p = lambda v: '-' if v is None else f'{v * 100:.1f}%'.replace('.', ',')
+        print(f'Total: {t["tags"]} TAGs válidas')
+        for k, nome in rotulos.INDICADORES:
+            print(f'  {nome}: {p(t[k])}')
         for _, teste, _, apurado, res in R.verificacao:
             if res == 'VERIFICAR':
                 print(f'VERIFICAR: {teste} = {apurado}')

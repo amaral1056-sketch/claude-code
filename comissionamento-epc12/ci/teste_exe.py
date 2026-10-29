@@ -1,5 +1,6 @@
 """Teste do executável no Windows (CI): roda o .exe com planilhas fictícias e confere o relatório gerado.
 Uso: python ci/teste_exe.py dist/ComissionamentoEPC12.exe PASTA_TEMPORARIA"""
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,7 +18,12 @@ rel = pasta / 'relatorio.xlsx'
 r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db'), '--li', str(li), '--importar', 'FVI', str(cad),
                     '--exportar', str(rel)], timeout=300)
 assert r.returncode == 0, f'executável terminou com código {r.returncode}'
-vg = openpyxl.load_workbook(rel)['VISAO_GERENCIAL']
-total = [vg.cell(7, c).value for c in (1, 4, 5)]
+vg = openpyxl.load_workbook(rel)['Visão Gerencial']
+total = [vg.cell(12, c).value for c in (1, 4, 5)]     # linha TOTAL da tabela por unidade
 assert total[0] == 'TOTAL' and total[1] == 7 and abs(total[2] - 4 / 6) < 1e-9, total
-print('executável OK:', exe.name, f'{exe.stat().st_size / 1e6:.1f} MB', total)
+# interface: abre a janela em modo de teste (todas as páginas) e confere que ela gravou o sinal de "ok"
+marca = pasta / 'interface_ok.txt'
+r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db')], timeout=300,
+                   env={**os.environ, 'EPC12_TESTE_INICIO': str(marca)})
+assert r.returncode == 0 and marca.exists() and marca.read_text() == 'ok', f'interface não abriu (código {r.returncode})'
+print('executável OK:', exe.name, f'{exe.stat().st_size / 1e6:.1f} MB', total, '· interface abriu')

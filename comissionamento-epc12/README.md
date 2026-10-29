@@ -11,22 +11,28 @@ comissionamento e é alimentado pelas **planilhas Excel** exportadas da FIC. Con
 
 ## Uso
 1. Copie `ComissionamentoEPC12.exe` para uma pasta (pode ser de rede) e abra. O banco é criado em `dados\comissionamento_epc12.db`
-   ao lado do .exe (se a pasta não aceitar gravação: `%LOCALAPPDATA%\ComissionamentoEPC12`). *Arquivo > Abrir ou criar banco* troca o arquivo.
-2. **Importar > LI – base SOP/SSOP** (aba LISTA). Checagens de integridade da LI param a importação se algo não bater.
-3. **Importar > Relatório de Cadastro Geral (FVI)**: o arquivo exportado da FIC, sem editar (título, cabeçalho, rodapé).
+   ao lado do .exe (se a pasta não aceitar gravação: `%LOCALAPPDATA%\ComissionamentoEPC12`). **Banco de dados** (barra
+   lateral, embaixo) abre outro banco, faz cópia de segurança e exporta as planilhas-modelo.
+2. **Importar planilha ▸ LI – base de SOP e SSOP** (aba LISTA). As checagens de integridade da LI param a importação se algo não bater.
+3. **Importar planilha ▸ Relatório de Cadastro Geral (FVI)**: o arquivo exportado da FIC, sem editar (título, cabeçalho, rodapé).
    O programa lê a data de emissão do rodapé e pede confirmação – é a data em que o avanço fica no **Histórico**.
 4. **FVM, CCM, TAP, TTAS**: layout ainda provisório; as colunas são achadas pelo **nome do cabeçalho**
-   (*Arquivo > Exportar planilhas-modelo* mostra o formato: `MALHA | SOP | SSOP | STATUS`, `Nº CCM | SSOP | STATUS`, …).
-5. **Painel**: indicadores (TAGs, FVI Campos II/III/V, FVM, CCM, TAP, TTAS) e gráficos – avanço por unidade,
-   situação das TAGs por campo, evolução no histórico e documentos por unidade (passe o mouse para ver os valores).
-6. **FVI**: veja **TAG a TAG** (SSOP, Nº FVI e status de cada campo: ✔ conta como aprovado · ○ pendente · — N/A),
-   ou agrupado por SSOP/SOP; filtre por unidade, situação (pendentes, sem FVI, canceladas…) e busca.
-   Duplo clique numa SSOP abre as TAGs dela. **FVM**: o mesmo, malha a malha.
-7. Confira a página **Verificação** (testes devem dar OK; pendências linha a linha) e use **Exportar Excel** (inclui abas TAGS_FVI e MALHAS_FVM com o status de cada campo).
+   (*Banco de dados ▸ Exportar planilhas-modelo* mostra o formato: `MALHA | SOP | SSOP | STATUS`, `Nº CCM | SSOP | STATUS`, …).
 
-Cada importação substitui a anterior do mesmo tipo (a FIC exporta sempre a lista completa) e fica registrada na aba
-**Importações**. Critérios de "aprovado" e o parâmetro *TAGs sem FVI no denominador* são editáveis na aba **Critérios**.
-Faça cópias do banco em *Arquivo > Salvar cópia de segurança*.
+### Páginas
+- **Visão Gerencial**: os 9 indicadores por extenso (FVI Campo II, FVI Campo III, FVI Campo V, FVM Campo III, FVM Campo V,
+  CCM, TAP, TTAS 1, TTAS 2) em cartões com anel de progresso; gráficos de avanço geral, FVI por unidade, FVM por unidade,
+  CCM e TAP por unidade, TTAS por unidade e evolução no histórico (passe o mouse para ver os valores); tabela por unidade.
+- **FVI**: cada TAG com a SSOP e a situação de cada campo – "Aprovado", "Pendente (status da FIC)" ou "Não se aplica".
+  Filtros por unidade, situação (com pendência, sem FVI gerada, canceladas, sem SSOP…) e busca por TAG, SSOP ou descrição.
+- **FVM**: o mesmo, malha a malha (Campos III e V). **CCM**, **TAP** (por SSOP) e **TTAS** (por SOP).
+- **Verificação** (testes e pendências linha a linha), **Histórico**, **Importações** e **Critérios** (editáveis).
+- **Exportar Excel** gera a mesma organização: Visão Gerencial (indicadores, tabela e gráficos), FVI, FVM, CCM, TAP, TTAS,
+  Verificação, Pendências, Histórico e Critérios.
+
+**Logo:** coloque um arquivo `logo.png` na mesma pasta do programa para ele aparecer no lugar do quadrado "LOGO".
+
+Cada importação substitui a anterior do mesmo tipo (a FIC exporta sempre a lista completa) e fica registrada em **Importações**.
 
 ### Linha de comando (automação)
 ```

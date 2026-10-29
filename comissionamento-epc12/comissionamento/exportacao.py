@@ -1,65 +1,27 @@
-"""Exportação para Excel: relatório gerencial (valores formatados) e planilhas-modelo de importação."""
+"""Exportação para Excel: relatório gerencial (mesma organização e nomes da tela) e planilhas-modelo de importação."""
 import datetime
 
 from openpyxl import Workbook
+from openpyxl.chart import BarChart, Reference
 from openpyxl.formatting.rule import ColorScaleRule
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter as L
 
+from . import rotulos
 from .importacao import CABECALHO_MODELO
+from .rotulos import COL_VISAO, NOTAS_VISAO
 
-F = 'Arial'
-HF = Font(name=F, bold=True, color='FFFFFF')
-HFILL = PatternFill('solid', fgColor='1F4E78')
+F = 'Segoe UI'
+HF = Font(name=F, bold=True, color='FFFFFF', size=10)
+HFILL = PatternFill('solid', fgColor='2A5FA8')
 NF = Font(name=F, size=10)
 BF = Font(name=F, size=10, bold=True)
-AMARELO = PatternFill('solid', fgColor='FFF2CC')
+TOTAL_FILL = PatternFill('solid', fgColor='EAF2FD')
+AMARELO = PatternFill('solid', fgColor='FFF4D6')
+VERMELHO = PatternFill('solid', fgColor='FBE9E5')
+LINHA = Border(bottom=Side(style='thin', color='E1E5EA'))
 PCT = '0.0%'
-
-# (título, chave, largura, é percentual)
-COL_VISAO = [('UNIDADE', 'unidade', 11, 0), ('SOP', 'sop', 7, 0), ('SSOP', 'ssop', 7, 0), ('TAGS (FVI)', 'tags', 9, 0),
-             ('% FVI CII', 'pct_cii', 9, 1), ('% FVI CIII', 'pct_ciii', 9, 1), ('% FVI CV', 'pct_cv', 9, 1),
-             ('MALHAS (FVM)', 'malhas', 9, 0), ('% FVM CIII', 'pct_fvm_ciii', 9, 1), ('% FVM CV', 'pct_fvm_cv', 9, 1),
-             ('SSOP c/ CCM APROV.', 'ccm', 10, 0), ('% CCM', 'pct_ccm', 8, 1), ('SSOP c/ TAP CONCL.', 'tap', 10, 0),
-             ('% TAP', 'pct_tap', 8, 1), ('SOP c/ TTAS1', 'ttas1', 9, 0), ('% TTAS1', 'pct_ttas1', 8, 1),
-             ('SOP c/ TTAS2', 'ttas2', 9, 0), ('% TTAS2', 'pct_ttas2', 8, 1), ('TAGS SEM FVI', 'tags_sem_fvi', 9, 0)]
-_FVI = [('TAGS', 'tags', 8, 0), ('CII APLIC.', 'cii_aplic', 9, 0), ('CII APROV.', 'cii_aprov', 9, 0), ('% CII', 'pct_cii', 8, 1),
-        ('CIII APLIC.', 'ciii_aplic', 9, 0), ('CIII APROV.', 'ciii_aprov', 9, 0), ('% CIII', 'pct_ciii', 8, 1),
-        ('CV APLIC.', 'cv_aplic', 9, 0), ('CV APROV.', 'cv_aprov', 9, 0), ('% CV', 'pct_cv', 8, 1),
-        ('TAGS SEM FVI', 'tags_sem_fvi', 9, 0)]
-_FVM = [('MALHAS', 'malhas', 9, 0), ('CIII APROV.', 'fvm_ciii', 9, 0), ('% CIII', 'pct_fvm_ciii', 8, 1),
-        ('CV APROV.', 'fvm_cv', 9, 0), ('% CV', 'pct_fvm_cv', 8, 1)]
-_SSOP = [('UNIDADE', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 26, 0), ('DESCRIÇÃO SSOP', 'descricao', 40, 0)]
-_SOP = [('UNIDADE', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('DESCRIÇÃO SOP', 'descricao', 40, 0), ('QTD SSOP', 'qtd_ssop', 8, 0)]
-COL_FVI_SSOP = _SSOP + _FVI
-COL_FVI_SOP = _SOP + _FVI
-COL_FVM_SSOP = _SSOP + _FVM
-COL_FVM_SOP = _SOP + _FVM
-COL_CCM = _SSOP + [('CCM REGISTRADOS', 'ccm_reg', 12, 0), ('APROVADO', 'ccm_aprovado', 10, 0), ('SITUAÇÃO', 'ccm_situacao', 16, 0)]
-COL_TAP = _SSOP + [('TAP REGISTRADOS', 'tap_reg', 12, 0), ('CONCLUÍDO', 'tap_concluido', 10, 0), ('SITUAÇÃO', 'tap_situacao', 16, 0)]
-COL_TTAS = _SOP + [('TTAS REGISTRADOS', 'ttas_reg', 12, 0), ('TTAS1 APROVADO', 'ttas1_aprovado', 12, 0),
-                   ('TTAS2 APROVADO', 'ttas2_aprovado', 12, 0), ('SITUAÇÃO', 'ttas_situacao', 18, 0)]
-
-COL_TAGS_XLS = [('TAG', 'tag', 20, 0), ('DESCRIÇÃO', 'descricao', 34, 0), ('UNIDADE', 'unidade', 10, 0),
-                ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 28, 0), ('CLASSE', 'classe', 30, 0), ('Nº FVI', 'n_fvi', 10, 0),
-                ('STATUS FVI', 'st_fvi', 13, 0), ('STATUS CAMPO II', 'st_cii', 14, 0), ('CII CONTA?', 'x_cii', 9, 0),
-                ('STATUS CAMPO III', 'st_ciii', 14, 0), ('CIII CONTA?', 'x_ciii', 9, 0), ('STATUS CAMPO IV', 'st_civ', 13, 0),
-                ('STATUS CAMPO V', 'st_cv', 14, 0), ('CV CONTA?', 'x_cv', 9, 0), ('SITUAÇÃO', 'situacao', 14, 0),
-                ('SEM FVI', 'x_sem_fvi', 8, 0)]
-COL_MALHAS_XLS = [('MALHA', 'malha', 22, 0), ('UNIDADE', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 28, 0),
-                  ('STATUS', 'status', 16, 0), ('CAMPO III ATINGIDO?', 'x_ciii', 12, 0),
-                  ('CAMPO V ATINGIDO?', 'x_cv', 12, 0), ('SITUAÇÃO', 'situacao', 14, 0)]
-
-
-def _sim_nao(v):
-    return 'N/A' if v is None else ('SIM' if v else 'NÃO')
-
-
-NOTAS_VISAO = [
-    '% FVI = aprovados ÷ aplicáveis (N/A e cancelados fora do denominador). % FVM = aprovadas ÷ malhas válidas.',
-    '% CCM e % TAP = SSOP com documento aprovado/concluído ÷ total de SSOP da unidade. % TTAS = SOP com TTAS1/TTAS2 aprovado ÷ total de SOP.',
-    'Totais ponderados (não é média de %). Itens com SSOP/SOP fora da base e TAGs sem SSOP não entram – ver VERIFICACAO.',
-]
+SERIE = ('2A78D6', 'EB6834', '1BAF7A')
 
 
 def _cabecalho(ws, colunas, linha=1, col0=1):
@@ -67,92 +29,131 @@ def _cabecalho(ws, colunas, linha=1, col0=1):
         c = ws.cell(linha, j, titulo)
         c.font, c.fill = HF, HFILL
         c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        ws.column_dimensions[L(j)].width = larg
-    ws.row_dimensions[linha].height = 32
+        ws.column_dimensions[L(j)].width = max(larg + 2, 9)
+    ws.row_dimensions[linha].height = 34
 
 
 def _escala(ws, rng):
-    ws.conditional_formatting.add(rng, ColorScaleRule(start_type='num', start_value=0, start_color='F8696B',
-                                                      mid_type='num', mid_value=0.5, mid_color='FFEB84',
-                                                      end_type='num', end_value=1, end_color='63BE7B'))
+    ws.conditional_formatting.add(rng, ColorScaleRule(start_type='num', start_value=0, start_color='F6C7BC',
+                                                      mid_type='num', mid_value=0.5, mid_color='FCEBB6',
+                                                      end_type='num', end_value=1, end_color='BFE3C8'))
 
 
-def _tabela(ws, colunas, linhas, linha0=1, col0=1, fonte=NF):
+def _tabela(ws, colunas, linhas, linha0=1, col0=1, filtro=True):
     _cabecalho(ws, colunas, linha0, col0)
     for i, r in enumerate(linhas, linha0 + 1):
         for j, (_, k, _, p) in enumerate(colunas, col0):
             c = ws.cell(i, j, r.get(k))
-            c.font = fonte
-            if p:
+            c.font, c.border = NF, LINHA
+            if p == 1:
                 c.number_format = PCT
+            elif p == 2:
+                c.alignment = Alignment(horizontal='center')
     if linhas:
         for j, (_, _, _, p) in enumerate(colunas, col0):
-            if p:
+            if p == 1:
                 _escala(ws, f'{L(j)}{linha0 + 1}:{L(j)}{linha0 + len(linhas)}')
+        if filtro:
+            ws.auto_filter.ref = f'{L(col0)}{linha0}:{L(col0 + len(colunas) - 1)}{linha0 + len(linhas)}'
+    ws.freeze_panes = ws.cell(linha0 + 1, col0 + 1)
     return linha0 + len(linhas)
 
 
+def _realcar(ws, linhas, coluna, cores, linha0=1, ncols=None):
+    """Pinta a linha inteira conforme o texto da coluna de situação."""
+    for i, r in enumerate(linhas, linha0 + 1):
+        fill = cores.get(r.get(coluna))
+        if fill:
+            for j in range(1, (ncols or ws.max_column) + 1):
+                ws.cell(i, j).fill = fill
+
+
+def _grafico(ws, titulo, ref_linhas, colunas_pct, ancora, cab_linha):
+    """Colunas agrupadas por unidade usando as colunas % da tabela da visão gerencial."""
+    g = BarChart()
+    g.type, g.grouping, g.title = 'col', 'clustered', titulo
+    g.y_axis.number_format, g.y_axis.scaling.min, g.y_axis.scaling.max = '0%', 0, 1
+    g.y_axis.majorGridlines = None
+    g.height, g.width, g.gapWidth = 7.5, 16, 80
+    a, b = ref_linhas
+    for i, col in enumerate(colunas_pct):
+        dados = Reference(ws, min_col=col, min_row=cab_linha, max_row=b)
+        g.add_data(dados, titles_from_data=True)
+        g.series[-1].graphicalProperties.solidFill = SERIE[i]
+        g.series[-1].graphicalProperties.line.solidFill = SERIE[i]
+    g.set_categories(Reference(ws, min_col=1, min_row=a, max_row=b))
+    g.legend.position = 'b'
+    ws.add_chart(g, ancora)
+
+
 def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(), incluir_sem_fvi=True):
+    rotulos.preparar(R)
     wb = Workbook()
+
+    # ---------------------------------------------------------------- Visão Gerencial
     ws = wb.active
-    ws.title = 'VISAO_GERENCIAL'
-    ws.cell(1, 1, 'VISÃO GERENCIAL – AVANÇO DO COMISSIONAMENTO POR UNIDADE – EPC 12').font = Font(name=F, bold=True, size=14)
-    ws.cell(2, 1, f'Data de referência: {data_referencia or "-"}   ·   Gerado em {datetime.datetime.now():%d/%m/%Y %H:%M}'
-                  f'   ·   TAGs sem FVI no denominador: {"SIM" if incluir_sem_fvi else "NÃO"}').font = BF
-    fim = _tabela(ws, COL_VISAO, R.visao + [R.total], linha0=4)
+    ws.title = 'Visão Gerencial'
+    ws.sheet_view.showGridLines = False
+    ws.cell(1, 1, 'Visão Gerencial – Avanço do Comissionamento por Unidade – EPC 12').font = Font(name=F, bold=True, size=15)
+    ws.cell(2, 1, f'Data de referência: {data_referencia or "–"}   ·   Gerado em {datetime.datetime.now():%d/%m/%Y %H:%M}'
+                  f'   ·   TAGs sem FVI gerada entram no cálculo do FVI: {"Sim" if incluir_sem_fvi else "Não"}').font = Font(
+        name=F, size=10, color='5F6670')
+    # quadro de indicadores gerais
+    ws.cell(4, 1, 'Indicadores gerais').font = Font(name=F, bold=True, size=12)
+    for j, (k, titulo) in enumerate(rotulos.INDICADORES, 1):
+        c = ws.cell(5, j, titulo)
+        c.font, c.fill, c.alignment = HF, HFILL, Alignment(horizontal='center', vertical='center', wrap_text=True)
+        v = ws.cell(6, j, R.total[k])
+        v.number_format, v.font, v.alignment = PCT, Font(name=F, bold=True, size=14), Alignment(horizontal='center')
+    ws.row_dimensions[5].height = 30
+    ws.row_dimensions[6].height = 26
+    ws.cell(8, 1, 'Avanço por unidade').font = Font(name=F, bold=True, size=12)
+    cab = 9
+    fim = _tabela(ws, COL_VISAO, R.visao + [R.total], linha0=cab, filtro=False)
     for j in range(1, len(COL_VISAO) + 1):
-        ws.cell(fim, j).font = BF
+        ws.cell(fim, j).font, ws.cell(fim, j).fill = BF, TOTAL_FILL
     for i, t in enumerate(NOTAS_VISAO, fim + 2):
-        ws.cell(i, 1, t).font = Font(name=F, italic=True, size=9)
-    ws.freeze_panes = 'B5'
+        ws.cell(i, 1, t).font = Font(name=F, italic=True, size=9, color='5F6670')
+    # gráficos (unidades, sem a linha TOTAL)
+    linhas_un = (cab + 1, fim - 1)
+    col = {k: j for j, (_, k, _, _) in enumerate(COL_VISAO, 1)}
+    g0 = fim + 6
+    _grafico(ws, 'FVI por unidade', linhas_un, [col['pct_cii'], col['pct_ciii'], col['pct_cv']], f'A{g0}', cab)
+    _grafico(ws, 'FVM por unidade', linhas_un, [col['pct_fvm_ciii'], col['pct_fvm_cv']], f'J{g0}', cab)
+    _grafico(ws, 'CCM e TAP por unidade', linhas_un, [col['pct_ccm'], col['pct_tap']], f'A{g0 + 17}', cab)
+    _grafico(ws, 'TTAS por unidade', linhas_un, [col['pct_ttas1'], col['pct_ttas2']], f'J{g0 + 17}', cab)
+    ws.freeze_panes = None
 
-    for nome, partes in (('FVI', [(COL_FVI_SSOP, R.ssop), (COL_FVI_SOP, R.sop)]),
-                         ('FVM', [(COL_FVM_SSOP, R.ssop), (COL_FVM_SOP, R.sop)]),
-                         ('CCM', [(COL_CCM, R.ssop)]), ('TAP', [(COL_TAP, R.ssop)]), ('TTAS', [(COL_TTAS, R.sop)])):
-        ws = wb.create_sheet(nome)
-        col0 = 1
-        for cols, linhas in partes:
-            _tabela(ws, cols, linhas, col0=col0)
-            col0 += len(cols) + 1
-        ws.freeze_panes = 'E2'
+    # ---------------------------------------------------------------- FVI e FVM (item a item)
+    cores = {'Sem FVI gerada': AMARELO, 'Sem SSOP': VERMELHO, 'SSOP fora da base': VERMELHO}
+    ws = wb.create_sheet('FVI')
+    _tabela(ws, rotulos.COL_TAGS_XLS, R.tags)
+    _realcar(ws, R.tags, 'txt_situacao', cores, ncols=len(rotulos.COL_TAGS_XLS))
+    ws = wb.create_sheet('FVM')
+    _tabela(ws, rotulos.COL_MALHAS_XLS, R.malhas)
+    _realcar(ws, R.malhas, 'txt_situacao', cores, ncols=len(rotulos.COL_MALHAS_XLS))
 
-    ws = wb.create_sheet('TAGS_FVI')
-    _tabela(ws, COL_TAGS_XLS, [{**t, 'x_cii': _sim_nao(t['ok_cii']), 'x_ciii': _sim_nao(t['ok_ciii']),
-                                 'x_cv': _sim_nao(t['ok_cv']), 'x_sem_fvi': 'SIM' if t['sem_fvi'] else ''} for t in R.tags])
-    ws.freeze_panes = 'B2'
-    ws.auto_filter.ref = f'A1:{L(len(COL_TAGS_XLS))}{len(R.tags) + 1}'
-    ws = wb.create_sheet('MALHAS_FVM')
-    _tabela(ws, COL_MALHAS_XLS, [{**m, 'x_ciii': _sim_nao(m['ok_ciii']), 'x_cv': _sim_nao(m['ok_cv'])} for m in R.malhas])
-    ws.freeze_panes = 'B2'
-    ws.auto_filter.ref = f'A1:{L(len(COL_MALHAS_XLS))}{len(R.malhas) + 1}'
+    # ---------------------------------------------------------------- documentos
+    for nome, cols, linhas in (('CCM', rotulos.COL_CCM, R.ssop), ('TAP', rotulos.COL_TAP, R.ssop),
+                               ('TTAS', rotulos.COL_TTAS, R.sop)):
+        _tabela(wb.create_sheet(nome), cols, linhas)
 
-    ws = wb.create_sheet('VERIFICACAO')
-    cols = [('GRUPO', 'g', 12, 0), ('TESTE', 't', 70, 0), ('ESPERADO', 'e', 10, 0), ('APURADO', 'a', 10, 0), ('RESULTADO', 'r', 12, 0)]
-    _tabela(ws, cols, [{'g': g, 't': t, 'e': '-' if e is None else e, 'a': a, 'r': r} for g, t, e, a, r in R.verificacao])
-    for i in range(2, len(R.verificacao) + 2):
-        if ws.cell(i, 5).value == 'VERIFICAR':
-            ws.cell(i, 5).fill = AMARELO
-    ws2 = wb.create_sheet('PENDENCIAS')
-    cols = [('DOCUMENTO', 'd', 11, 0), ('LINHA NO ARQUIVO', 'l', 10, 0), ('IDENTIFICAÇÃO', 'i', 26, 0),
-            ('SSOP / SOP', 's', 28, 0), ('PROBLEMA', 'p', 70, 0)]
-    _tabela(ws2, cols, [dict(zip('dlisp', p)) for p in R.pendencias])
-    ws2.freeze_panes = 'A2'
-
+    # ---------------------------------------------------------------- controle
+    ws = wb.create_sheet('Verificação')
+    ver = [{'g': g, 't': t, 'e': '-' if e is None else e, 'a': a, 'r': {'OK': 'OK', 'VERIFICAR': 'Verificar',
+                                                                     'INFO': 'Informação'}[r]}
+           for g, t, e, a, r in R.verificacao]
+    _tabela(ws, rotulos.COL_VER, ver)
+    _realcar(ws, ver, 'r', {'Verificar': VERMELHO}, ncols=len(rotulos.COL_VER))
+    _tabela(wb.create_sheet('Pendências'), rotulos.COL_PEND, [dict(zip('dlisp', p)) for p in R.pendencias])
     if historico:
-        ws = wb.create_sheet('HISTORICO')
-        cols = [('DATA', 'data', 11, 0), ('UNIDADE', 'unidade', 11, 0), ('TAGS', 'tags', 8, 0), ('% FVI CII', 'pct_cii', 9, 1),
-                ('% FVI CIII', 'pct_ciii', 9, 1), ('% FVI CV', 'pct_cv', 9, 1), ('MALHAS', 'malhas', 8, 0),
-                ('% FVM CIII', 'pct_fvm_ciii', 9, 1), ('% FVM CV', 'pct_fvm_cv', 9, 1), ('% CCM', 'pct_ccm', 8, 1),
-                ('% TAP', 'pct_tap', 8, 1), ('% TTAS1', 'pct_ttas1', 8, 1), ('% TTAS2', 'pct_ttas2', 8, 1)]
-        _tabela(ws, cols, list(historico))
-        ws.freeze_panes = 'C2'
-
+        _tabela(wb.create_sheet('Histórico'), rotulos.COL_HIST, list(historico))
     if criterios:
-        ws = wb.create_sheet('CRITERIOS')
-        cols = [('ETAPA', 'e', 14, 0), ('CÓDIGO DE STATUS', 'c', 22, 0), ('ORIGEM', 'o', 80, 0)]
-        _tabela(ws, cols, [{'e': e, 'c': c, 'o': o} for _, e, c, o in criterios])
-        for i in range(2, len(criterios) + 2):
-            if str(ws.cell(i, 3).value or '').startswith('A CONFIRMAR'):
+        ws = wb.create_sheet('Critérios')
+        crit = [{'etapa': e, 'codigo': c, 'origem': o} for _, e, c, o in criterios]
+        _tabela(ws, rotulos.COL_CRIT, crit)
+        for i, r in enumerate(crit, 2):
+            if str(r['origem']).startswith('A CONFIRMAR'):
                 for j in (1, 2, 3):
                     ws.cell(i, j).fill = AMARELO
     wb.save(destino)
