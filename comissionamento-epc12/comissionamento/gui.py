@@ -23,7 +23,7 @@ XLSX = [('Planilhas Excel', '*.xlsx *.xlsm'), ('Todos os arquivos', '*.*')]
 PAGINAS = {
     'Visão Gerencial': ('visao', 'Status da FIC em FVI, FVM, CCM, TAP e TTAS – geral ou por unidade'),
     'FVI': ('fvi', 'Acompanhamento TAG a TAG dos Campos II, III e V da FVI'),
-    'FVM': ('fvm', 'Acompanhamento malha a malha – status da malha na FIC'),
+    'FVM': ('fvm', 'Acompanhamento malha a malha, com as TAGs de cada malha e o status da FVM'),
     'CCM': ('ccm', 'Acompanhamento do CCM por SSOP'),
     'TAP': ('tap', 'Acompanhamento do TAP por SOP'),
     'TTAS': ('ttas', 'Acompanhamento do TTAS 1 e do TTAS 2 por SOP'),
@@ -270,7 +270,7 @@ class App(ctk.CTk):
     def menu_importar(self):
         """Base SOP / SSOP e atualizações da FIC."""
         return self._menu([('SOP / SSOP', self.importar_li), None]
-                          + [(t, lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_FIC])
+                          + [(t, lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_MENU])
 
     def menu_banco(self):
         return self._menu([('Abrir ou criar banco de dados…', self.escolher_banco),
@@ -335,7 +335,7 @@ class App(ctk.CTk):
         self.lbl_pagina.pack(anchor='w')
         self.lbl_sub = ctk.CTkLabel(txt, text='', font=tema.cfonte(11), text_color=tema.TEXTO_MUDO, height=16)
         self.lbl_sub.pack(anchor='w')
-        self.btn_exportar = botao_sec(topo, 'Exportar Excel', 'exportar', self.exportar, height=34)
+        self.btn_exportar = botao_sec(topo, 'Exportar Excel e PDF', 'exportar', self.exportar, height=34, width=196)
         self.btn_exportar.pack(side='right')
         self.btn_importar = botao_pri(topo, 'Importar atualização', 'importar', None, height=34)
         self.btn_importar.configure(command=lambda: self._abrir_menu(self.btn_importar, self.menu_importar()))
@@ -465,11 +465,11 @@ class App(ctk.CTk):
         d['tabela'].pack(fill='both', expand=True)
 
     def _pg_fvm(self, f):
-        d = self.fvm = {'nome': 'FVM', 'ident': 'malha', 'dica_busca': 'Buscar malha'}
+        d = self.fvm = {'nome': 'FVM', 'ident': ('malha', 'tag'), 'dica_busca': 'Buscar malha ou TAG'}
         self._filtros(f, d)
-        nota(f, 'Status da malha como vem da FIC (Relatório de Hierarquia de Malhas); a SSOP vem das TAG/linhas da malha. '
-                'Uma malha pode, mas não deve, pertencer a mais de uma SSOP: nesse caso ela aparece uma vez em cada SSOP, '
-                'com a linha em cinza, e entra na página Verificação.').pack(
+        nota(f, 'Uma linha por TAG da malha. TAG e SSOP: Relatório de Hierarquia de Malhas · Status da FVM como vem do '
+                'Relatório de Status de Malhas (importe os dois em Importar atualização ▸ FVM). Malha em mais de uma SSOP '
+                '(pode, mas não deve): linha em cinza e página Verificação.').pack(
             side='bottom', fill='x', pady=(8, 0))
         d['tabela'] = Tabela(f, rotulos.COL_MALHAS)
         d['tabela'].pack(fill='both', expand=True)
@@ -678,15 +678,19 @@ class App(ctk.CTk):
             return
         data = servico.data_br(self.banco.data_referencia_atual())
         nome = f'CONTROLE_GERENCIAL_EPC12_{(data or "sem_data").replace("/", "-")}.xlsx'
-        p = filedialog.asksaveasfilename(title='Exportar relatório Excel', defaultextension='.xlsx', initialfile=nome,
-                                         filetypes=[('Planilha Excel', '*.xlsx')])
+        p = filedialog.asksaveasfilename(title='Exportar relatório (Excel e PDF)', defaultextension='.xlsx',
+                                         initialfile=nome, filetypes=[('Planilha Excel', '*.xlsx')])
         if not p:
             return
-        ok = self._executar(lambda: exportacao.exportar_relatorio(
-            self.R, p, data, servico.historico_com_percentuais(self.banco), self.banco.criterios(),
-            self.banco.incluir_sem_fvi, self.banco.status_fic()), f'Relatório exportado: {p}')
-        if ok and messagebox.askyesno('Relatório exportado', f'Arquivo salvo:\n{p}\n\nAbrir agora?'):
-            abrir_arquivo(p)
+        arquivos = self._executar(lambda: exportacao.exportar_relatorio(
+            self.R, p, data, self.banco.incluir_sem_fvi, self.banco.status_fic(),
+            [configuracao.pasta_programa(), configuracao.pasta_programa() / 'dados']))
+        if not arquivos:
+            return
+        xlsx, pdf = arquivos
+        self.status_msg(f'Relatório exportado: {xlsx} e {pdf.name}')
+        if messagebox.askyesno('Relatório exportado', f'Arquivos salvos:\n{xlsx}\n{pdf}\n\nAbrir o PDF agora?'):
+            abrir_arquivo(pdf)
 
     # ------------------------------------------------------------------ histórico e critérios
     def registrar_historico(self):
@@ -799,7 +803,7 @@ class App(ctk.CTk):
                     f'{"Status FVI" if escolha == "Status FVI" else "FVI " + escolha} por TAG'),
             # malha em mais de uma SSOP conta uma vez na pizza
             'FVM': (list({m['malha']: m['status'] for m in R.malhas if na_unidade(m)}.values()), 'malhas',
-                    'Status da malha'),
+                    'Status da FVM por malha'),
             'CCM': ([s['txt_ccm_status'] for s in R.ssop if na_unidade(s)], 'SSOP', 'Status do CCM por SSOP'),
             'TAP': ([s['txt_tap_status'] for s in R.sop if na_unidade(s)], 'SOP', 'Status do TAP por SOP'),
             'TTAS': ([s['txt_ttas_status'] for s in R.sop if na_unidade(s)], 'SOP', 'Status do TTAS por SOP'),
@@ -895,9 +899,13 @@ class App(ctk.CTk):
         if 'busca' in d:
             busca = d['busca'].get().strip().upper()
             if busca:
-                linhas = [r for r in linhas if busca in str(r.get(d['ident']) or '').upper()]
+                campos = d['ident'] if isinstance(d['ident'], tuple) else (d['ident'],)
+                linhas = [r for r in linhas if any(busca in str(r.get(c) or '').upper() for c in campos)]
         d['tabela'].preencher(linhas, self._cor_linha if d['nome'] in ('FVI', 'FVM') else None)
-        d['contagem'].configure(text=f'{numero(len(linhas))} {unidade}')
+        if d['nome'] == 'FVM':      # uma linha por TAG: o contador mostra as malhas distintas
+            d['contagem'].configure(text=f'{numero(len({r["malha"] for r in linhas}))} malhas')
+        else:
+            d['contagem'].configure(text=f'{numero(len(linhas))} {unidade}')
 
     @staticmethod
     def _cor_linha(r):
@@ -927,7 +935,7 @@ class App(ctk.CTk):
             '   CCM, TAP e TTAS (listas da FIC): os arquivos exportados da FIC, sem editar.\n'
             '3. Confirme a data de referência: o avanço fica registrado no Histórico nessa data.\n'
             '4. Confira a página Verificação (os testes devem resultar OK) antes de apresentar.\n'
-            '5. Exportar Excel gera a planilha gerencial para envio, com as mesmas páginas e gráficos.\n\n'
+            '5. Exportar Excel e PDF gera o relatório para envio: Visão Gerencial, FVI, FVM, CCM, TAP e TTAS, com a logo.\n\n'
             'Visão Gerencial: pizzas com os status da FIC de FVI, FVM, CCM, TAP e TTAS (geral ou por unidade).\n'
             'FVI e FVM: filtre por unidade, SOP, SSOP e TAG (ou malha).\n'
             'CCM, TAP e TTAS: filtre por unidade, SOP, SSOP e situação.\n'

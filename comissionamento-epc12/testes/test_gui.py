@@ -101,10 +101,12 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
     assert len(d['tabela'].linhas) == 4
     # FVM: M6 aparece em duas SSOP (pode, mas não deve) – entra nas duas e é sinalizada
     fvm = f.FVM_SINTETICO + [('M6', f.P1, f.S1, 'ACAMPO5'), ('M6', f.P2, f.S2, 'ACAMPO5')]
-    escolher(monkeypatch, f.provisorio(tmp_path / 'fvm.xlsx', ['MALHA', 'SOP', 'SSOP', 'STATUS'], fvm), '28/10/2026')
-    app.importar_fic('FVM')
-    assert [c[0] for c in gui.rotulos.COL_MALHAS] == ['Malha', 'SSOP', 'Status da malha']
+    for arq in f.fvm(tmp_path, fvm):
+        escolher(monkeypatch, arq, '28/10/2026')
+        app.importar_fic('FVM')
+    assert [c[0] for c in gui.rotulos.COL_MALHAS] == ['Malha', 'TAG', 'SSOP', 'Status da FVM']
     malhas = {(m['malha'], m['ssop']): m for m in app.fvm['tabela'].linhas}
+    assert malhas[('M6', f.S2)]['tag'] == 'T-M6-2'
     assert (malhas[('M1', f.S1)]['status'], malhas[('M3', f.S1)]['status'], malhas[('M4', f.S1)]['status']) == (
         'ACAMPO5', 'AAPRV3E4FIS', 'CANCEL')
     assert malhas[('M6', f.S1)]['multi_ssop'] and malhas[('M6', f.S2)]['multi_ssop'] and not malhas[('M1', f.S1)]['multi_ssop']
@@ -115,6 +117,11 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
     app.fvm['busca'].insert(0, 'M5')
     app._preencher(app.fvm)
     assert [m['malha'] for m in app.fvm['tabela'].linhas] == ['M5']
+    app.fvm['busca'].delete(0, 'end')
+    app.fvm['busca'].insert(0, 'T-M6-2')                      # a busca também acha pela TAG
+    app._preencher(app.fvm)
+    assert [(m['malha'], m['ssop']) for m in app.fvm['tabela'].linhas] == [('M6', f.S2)]
+    app.fvm['busca'].delete(0, 'end')
     # TTAS por SOP: colunas renomeadas e filtro por SSOP encontra o SOP dela
     escolher(monkeypatch, f.provisorio(tmp_path / 'ttas.xlsx', ['Nº TTAS', 'SOP', 'STATUS'], f.TTAS_SINTETICO), '28/10/2026')
     app.importar_fic('TTAS')
@@ -135,7 +142,7 @@ def test_fluxo_completo(app, tmp_path, monkeypatch):
         app.mostrar(nome)
         app.update()
     assert [r['data_referencia'] for r in app.t_hist.linhas] == ['2026-10-28']   # TOTAL de 28/10
-    assert [r['tipo'] for r in app.t_imp.linhas] == ['TTAS', 'FVM', 'CCM', 'FVI', 'LI']
+    assert [r['tipo'] for r in app.t_imp.linhas] == ['TTAS', 'FVM_STATUS', 'FVM', 'CCM', 'FVI', 'LI']
 
 
 def test_arquivo_errado_nao_grava(app, tmp_path, monkeypatch):
@@ -202,6 +209,10 @@ def test_modelos_da_fic_pela_tela(app, tmp_path, monkeypatch):
         ('M1', 'OPERAÇÃO', [('TAG', 'T1', f.S1, f.P1)]),
         ('M2', 'PRONTO', [('TAG', 'T2', f.S1, f.P1), ('TAG', 'T3', f.S2, f.P2)])]))
     app.importar_fic('FVM')
-    assert len(app.fvm['tabela'].linhas) == 3                  # tabela: uma linha por malha e SSOP
+    assert len(app.fvm['tabela'].linhas) == 3                  # tabela: uma linha por TAG da malha
     assert '2 malhas' in app.sub_pizza['FVM'].cget('text')     # pizza: cada malha uma vez
-    assert sorted((r, n) for r, n, _, _ in app.pizzas['FVM'].fatias) == [('OPERAÇÃO', 1), ('PRONTO', 1)]
+    assert [(r, n) for r, n, _, _ in app.pizzas['FVM'].fatias] == [('Sem status', 2)]   # status vem do outro relatório
+    escolher(monkeypatch, f.status_malhas(tmp_path / 'st.xlsx', [('M1', '1', 'Aprovado'), ('M2', '', '')]))
+    app.importar_fic('FVM')
+    assert 'relatório filtrado' in app.t_imp.linhas[0]['observacao']
+    assert sorted((r, n) for r, n, _, _ in app.pizzas['FVM'].fatias) == [('Aprovado', 1), ('Sem status', 1)]

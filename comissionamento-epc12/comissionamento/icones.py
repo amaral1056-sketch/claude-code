@@ -158,13 +158,22 @@ def recurso(nome):
     return Path(__file__).resolve().parent / 'recursos' / nome
 
 
-def logo(pastas, altura=64):
-    """CTkImage da logo: logo.png ao lado do programa (substitui) ou a logo embutida. None se não houver."""
+def arquivo_logo(pastas=()):
+    """logo.png ao lado do programa (substitui) ou a logo embutida; None se nenhuma abrir."""
     for arq in [Path(p) / 'logo.png' for p in pastas] + [recurso('logo.png')]:
         if arq.exists():
             try:
-                img = Image.open(arq).convert('RGBA')
+                Image.open(arq).verify()
             except OSError:
                 continue
-            return ctk.CTkImage(light_image=img, size=(round(img.width * altura / img.height), altura))
+            return arq
     return None
+
+
+def logo(pastas, altura=64):
+    """CTkImage da logo (arquivo_logo). None se não houver."""
+    arq = arquivo_logo(pastas)
+    if arq is None:
+        return None
+    img = Image.open(arq).convert('RGBA')
+    return ctk.CTkImage(light_image=img, size=(round(img.width * altura / img.height), altura))

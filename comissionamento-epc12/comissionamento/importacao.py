@@ -5,8 +5,9 @@
   A LI antiga (aba LISTA) continua aceita, com as checagens da etapa 01 da planilha original.
 - Relatório de Cadastro Geral da FIC (FVI): o arquivo exportado, sem edição (título, cabeçalho, dados, rodapé).
   Mesma regra de leitura da IMP_FVI: linha de dado = TAG e CONTRATO preenchidos e TAG diferente de "TAG".
-- FVM: "Relatório de Hierarquia de Malhas" (linhas MALHA seguidas das TAG/LINHA da malha): a SSOP da malha vem das
-  linhas TAG/LINHA; o status é o da linha MALHA, como vem. Lista simples (MALHA, SSOP, STATUS) também é aceita.
+- FVM, dois relatórios da FIC (cada um substitui só a sua parte):
+  "Relatório de Hierarquia de Malhas" – linhas MALHA seguidas das TAG/LINHA da malha, com SSOP/SOP (uma linha por TAG);
+  "Relatório de Status de Malhas" – malha, Nº da FVM e Status da FVM (como vem: a descrição, ex.: "Aprovado").
 - CCM (por SSOP), TAP e TTAS (por SOP): listas da FIC; colunas localizadas pelo NOME do cabeçalho
   (COLUNAS_PROVISORIAS). No TAP sem coluna SOP, o SOP vem do número ("TAP-" + SOP).
 - STATUS_*.xlsx: listas oficiais de status (código | descrição).
@@ -212,55 +213,78 @@ def ler_cadastro(arquivo):
     return regs, data_do_rodape(linhas), {'linhas_arquivo': len(linhas), 'tags': len(regs)}
 
 
-# ====================================================================== FVM: Relatório de Hierarquia de Malhas
+# ====================================================================== FVM: relatórios de malhas da FIC
 def ler_fvm(arquivo):
-    """Hierarquia de Malhas: um registro por malha e SSOP (a SSOP vem das TAG/LINHA da malha). Sem esse layout,
-    lê a lista simples (MALHA, SSOP, STATUS)."""
-    spec = [('tipo', True, ('TIPO',)), ('malha', True, ('MALHA',)), ('status', True, ('STATUS',)),
-            ('ssop', True, ('SSOP',)), ('sop', False, ('SOP',))]
+    """Hierarquia de Malhas (tipo FVM) ou Status de Malhas (tipo FVM_STATUS), reconhecido pelo cabeçalho.
+    Devolve (registros, data_de_emissão|None, informações com 'tipo')."""
     wb = _abrir(arquivo)
     linhas = [tuple(r) for r in wb.worksheets[0].iter_rows(values_only=True)]
     aba = wb.worksheets[0].title
     wb.close()
-    i, pos = _localizar_cabecalho(linhas, spec)
-    if i is None:
-        return ler_provisorio('FVM', arquivo)
+    spec_h = [('tipo', True, ('TIPO',)), ('malha', True, ('MALHA',)), ('tag', True, ('TAG/LINHAS', 'TAG/LINHA', 'TAG')),
+              ('status', True, ('STATUS',)), ('ssop', True, ('SSOP',)), ('sop', False, ('SOP',))]
+    spec_s = [('malha', True, ('MALHA',)), ('n_fvm', True, ('FVM', 'Nº FVM', 'NUMERO FVM')), ('status', True, ('STATUS',))]
+    i, pos = _localizar_cabecalho(linhas, spec_h)
+    if i is not None:
+        return _hierarquia(linhas, i, pos, aba)
+    i, pos = _localizar_cabecalho(linhas, spec_s)
+    if i is not None:
+        return _status_malhas(linhas, i, pos, aba)
+    raise ErroImportacao('Arquivo de FVM não reconhecido. Use o "Relatório de Hierarquia de Malhas" (colunas TIPO, MALHA, '
+                         'TAG/LINHAS, STATUS, SSOP) ou o "Relatório de Status de Malhas" (colunas Malha, FVM, Status) da FIC.')
 
-    def val(r, c):
-        p = pos.get(c)
-        v = texto(r[p]).strip() if p is not None and p < len(r) else ''
-        return '' if v == '-' else v      # "-" = sem valor no relatório
-    malhas, ignoradas = {}, []
+
+def _valor(r, pos, c):
+    p = pos.get(c)
+    v = texto(r[p]).strip() if p is not None and p < len(r) else ''
+    return '' if v == '-' else v          # "-" = sem valor no relatório
+
+
+def _hierarquia(linhas, i, pos, aba):
+    """Uma linha por TAG/LINHA da malha (malha sem TAG: uma linha sem TAG); status_item = status da malha (item)."""
+    regs, status_malha, ignoradas = [], {}, []
     for n, r in enumerate(linhas[i + 1:], i + 2):
-        tipo, malha = chave(val(r, 'tipo')), val(r, 'malha')
+        tipo, malha = chave(_valor(r, pos, 'tipo')), _valor(r, pos, 'malha')
         if tipo == 'MALHA' and malha:
-            malhas.setdefault(malha, {'linha': n, 'status': val(r, 'status'), 'ssop': {}})
-            malhas[malha]['linha'], malhas[malha]['status'] = n, val(r, 'status')
+            status_malha[malha] = (n, _valor(r, pos, 'status'))
         elif tipo in ('TAG', 'LINHA') and malha:
-            m = malhas.setdefault(malha, {'linha': n, 'status': '', 'ssop': {}})
-            if val(r, 'ssop'):
-                m['ssop'].setdefault(val(r, 'ssop'), (n, val(r, 'sop')))
+            regs.append({'linha': n, 'malha': malha, 'tag': _valor(r, pos, 'tag'), 'sop': _valor(r, pos, 'sop'),
+                         'ssop': _valor(r, pos, 'ssop'), 'status_item': _valor(r, pos, 'status')})
         elif any(texto(x) for x in r):
             ignoradas.append(n)           # rodapé (emissão, classificação, folha)
-    regs = []
-    for malha, m in malhas.items():
-        for ssop, (n, sop) in (m['ssop'].items() or [('', (m['linha'], ''))]):
-            regs.append({'linha': n if m['ssop'] else m['linha'], 'malha': malha, 'sop': sop, 'ssop': ssop,
-                         'status': m['status']})
+    com_tag = {r['malha'] for r in regs}
+    for malha, (n, st) in status_malha.items():
+        if malha not in com_tag:
+            regs.append({'linha': n, 'malha': malha, 'tag': '', 'sop': '', 'ssop': '', 'status_item': st})
     if not regs:
         raise ErroImportacao(f'Nenhuma malha encontrada no Relatório de Hierarquia de Malhas (aba {aba}).')
     regs.sort(key=lambda r: r['linha'])
-    return regs, data_do_rodape(linhas), {'aba': aba, 'registros': len(regs), 'malhas': len(malhas),
-                                          'linhas_ignoradas': ignoradas}
+    return regs, data_do_rodape(linhas), {'tipo': 'FVM', 'aba': aba, 'registros': len(regs),
+                                          'malhas': len({r['malha'] for r in regs}), 'linhas_ignoradas': ignoradas}
 
 
-# ====================================================================== FVM (lista simples), CCM, TAP, TTAS
+def _status_malhas(linhas, i, pos, aba):
+    """Uma linha por malha: Nº da FVM e Status da FVM como vêm. Guarda o filtro de status do cabeçalho, se houver."""
+    filtro = next((texto(c).strip() for r in linhas[:i] for c in r if texto(c).strip().upper().startswith('STATUS FVM:')), '')
+    regs, ignoradas = [], []
+    for n, r in enumerate(linhas[i + 1:], i + 2):
+        if _nome_coluna(r[0] if r else '').startswith('EMISSAO'):
+            ignoradas.extend(range(n, len(linhas) + 1))   # rodapé: emissão, emissor, classificação, folha, data
+            break
+        malha = _valor(r, pos, 'malha')
+        if malha and chave(malha) != 'MALHA':
+            regs.append({'linha': n, 'malha': malha, 'n_fvm': _valor(r, pos, 'n_fvm'), 'status': _valor(r, pos, 'status')})
+        elif any(texto(x) for x in r):
+            ignoradas.append(n)
+    if not regs:
+        raise ErroImportacao(f'Nenhuma malha encontrada no Relatório de Status de Malhas (aba {aba}).')
+    return regs, data_do_rodape(linhas), {'tipo': 'FVM_STATUS', 'aba': aba, 'registros': len(regs),
+                                          'filtro_status': filtro.rstrip(', '), 'linhas_ignoradas': ignoradas}
+
+
+# ====================================================================== CCM, TAP, TTAS
 # tipo -> [(campo no banco, obrigatório, nomes aceitos no cabeçalho)]
 COLUNAS_PROVISORIAS = {
-    'FVM': [('malha', True, ('MALHA', 'Nº MALHA', 'TAG MALHA', 'TAG DA MALHA', 'Nº FVM', 'FVM')),
-            ('sop', False, ('SOP',)),
-            ('ssop', True, ('SSOP',)),
-            ('status', True, ('STATUS', 'STATUS FVM', 'STATUS DA FVM', 'SITUACAO'))],
     'CCM': [('numero', True, ('Nº CCM', 'CCM', 'NUMERO CCM', 'NUMERO DO CCM', 'NUMERO', 'Nº')),
             ('ssop', True, ('SSOP',)),
             ('status', True, ('STATUS', 'STATUS CCM', 'STATUS DO CCM', 'SITUACAO'))],
@@ -288,7 +312,7 @@ def _localizar_cabecalho(linhas, spec):
 
 
 def ler_provisorio(tipo, arquivo):
-    """Devolve (registros, data_de_emissão|None, informações) para FVM/CCM/TAP/TTAS."""
+    """Devolve (registros, data_de_emissão|None, informações) para CCM/TAP/TTAS."""
     spec = COLUNAS_PROVISORIAS[tipo]
     wb = _abrir(arquivo)
     achado = None

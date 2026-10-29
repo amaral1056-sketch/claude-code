@@ -162,26 +162,72 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
                 yield acc[k], st
         cont[doc] = m
 
-    for r in dados.get('FVM', []):
-        k, st = chave(r['ssop']), chave(r['status'])
+    # ------------------------------------------------------------------ FVM: hierarquia (TAG -> SSOP) + status das malhas
+    # o Relatório de Status de Malhas traz a DESCRIÇÃO do status ("Aprovado"): vale o código ou a descrição oficial.
+    # "Aprovado" é descrição de APRV e de APROVADO: conta como aprovado se algum dos dois estiver nos Critérios (A CONFIRMAR)
+    desc_fvm = defaultdict(set)
+    for doc, codigo, descr in status_fic:
+        if chave(doc) == 'FVM':
+            desc_fvm[chave(descr)].add(chave(codigo))
+
+    def codigos_fvm(st):
+        k = chave(st)
+        return ({k} | desc_fvm.get(k, set())) if k else set()
+
+    hier, st_regs = dados.get('FVM', []), dados.get('FVM_STATUS', [])
+    status_malha, repetidas = {}, 0
+    for r in st_regs:
+        k = chave(r['malha'])
+        if k in status_malha:
+            repetidas += 1
+            pend.append(('FVM', r['linha'], r['malha'], '', 'malha repetida no Relatório de Status de Malhas (vale a última)'))
+        status_malha[k] = r
+    desconhecidos_fvm = 0
+    for r in status_malha.values():
+        if chave(r['status']) and not (codigos_fvm(r['status']) & cod['FVM']):
+            desconhecidos_fvm += 1
+            pend.append(('FVM', r['linha'], r['malha'], '', f'status com código desconhecido: {r["status"]}'))
+
+    def linha_malha(r, tag, ssop, sop):
+        sm = status_malha.get(chave(r['malha']), {})
+        st, k = sm.get('status', ''), chave(ssop)
+        cods = codigos_fvm(st)
         ref = base_ssop.get(k)
-        valido = st not in canc or st == ''
-        R.malhas.append({
-            'linha': r['linha'], 'malha': r['malha'], 'unidade': ref['unidade'] if ref else '',
-            'sop': ref['sop'] if ref else r['sop'], 'ssop': r['ssop'], 'status': r['status'],
-            'ok_ciii': (st != '' and st in crit['FVM_CIII']) if valido else None,
-            'ok_cv': (st != '' and st in crit['FVM_CV']) if valido else None,
-            'situacao': 'CANCELADA' if not valido else ('SEM SSOP' if k == '' else ('FORA DA BASE' if ref is None else 'VÁLIDA'))})
+        valido = not (cods & canc)
+        return {'linha': r['linha'], 'malha': r['malha'], 'tag': tag, 'unidade': ref['unidade'] if ref else '',
+                'sop': ref['sop'] if ref else sop, 'ssop': ssop, 'n_fvm': sm.get('n_fvm', ''), 'status': st,
+                'ok_ciii': bool(cods & crit['FVM_CIII']) if valido else None,
+                'ok_cv': bool(cods & crit['FVM_CV']) if valido else None,
+                'situacao': 'CANCELADA' if not valido else ('SEM SSOP' if k == '' else ('FORA DA BASE' if ref is None else 'VÁLIDA'))}
+    for r in hier:
+        R.malhas.append(linha_malha(r, r['tag'], r['ssop'], r['sop']))
+    na_hierarquia = {chave(r['malha']) for r in hier}
+    so_status = [r for k, r in status_malha.items() if k not in na_hierarquia]
+    for r in so_status:
+        R.malhas.append(linha_malha(r, '', '', ''))
     # uma malha pode, mas não deve, pertencer a mais de uma SSOP: aceita (conta em cada SSOP) e sinaliza
-    multi_fvm = _malhas_em_varias_ssop(dados.get('FVM', []))
+    multi_fvm = _malhas_em_varias_ssop(hier)
     for m_ in R.malhas:
         m_['multi_ssop'] = chave(m_['malha']) in multi_fvm
     for k_, ss_ in multi_fvm.items():
         pend.append(('FVM', '', k_, ' / '.join(sorted(ss_)), f'malha em {len(ss_)} SSOP (pode, mas não deve)'))
-    for a, st in por_ssop('FVM', dados.get('FVM', []), 'malha', 'FVM', True):
+    # avanço: cada malha uma vez por SSOP (malha sem SSOP em nenhuma TAG conta uma vez, como "sem SSOP")
+    por_malha = {}
+    for m_ in R.malhas:
+        par = por_malha.setdefault(chave(m_['malha']), {})
+        if chave(m_['ssop']) or not par:
+            par.setdefault(chave(m_['ssop']), {'linha': m_['linha'], 'malha': m_['malha'], 'ssop': m_['ssop'],
+                                               'status': m_['status']})
+    regs_fvm = [r for par in por_malha.values() for k, r in par.items() if k or len(par) == 1]
+    for a, st in por_ssop('FVM', regs_fvm, 'malha', None, True):
+        cods = codigos_fvm(st)
         a['malhas'] += 1
-        a['fvm_ciii'] += st != '' and st in crit['FVM_CIII']
-        a['fvm_cv'] += st != '' and st in crit['FVM_CV']
+        a['fvm_ciii'] += bool(cods & crit['FVM_CIII'])
+        a['fvm_cv'] += bool(cods & crit['FVM_CV'])
+    cont['FVM']['desconhecido'] = desconhecidos_fvm
+    cont['FVM']['so_status'] = len(so_status)
+    cont['FVM']['sem_status'] = sum(1 for k in na_hierarquia if k not in status_malha)
+    cont['FVM']['repetidas'] = repetidas
     for a, st in por_ssop('CCM', dados.get('CCM', []), 'numero', 'CCM', True):
         a['ccm_reg'] += 1
         a['ccm_ok'] += st != '' and st in crit['CCM']
@@ -340,6 +386,11 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
         teste(doc, f'{doc} – registros sem {"SOP" if doc in ("TAP", "TTAS") else "SSOP"}', c[doc]['sem_ssop'], None)
         teste(doc, f'{doc} – registros cancelados (fora das contas)', c[doc]['canceladas'], None)
     teste('FVM', 'FVM – malhas em mais de uma SSOP (pode, mas não deve)', len(multi_fvm))
+    if st_regs:
+        teste('FVM', 'FVM – malhas do Relatório de Status que não estão na Hierarquia de Malhas (sem SSOP)',
+              c['FVM']['so_status'], None)
+        teste('FVM', 'FVM – malhas da Hierarquia sem linha no Relatório de Status', c['FVM']['sem_status'], None)
+        teste('FVM', 'FVM – malhas repetidas no Relatório de Status de Malhas', c['FVM']['repetidas'])
     for doc in ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS'):
         teste('CRITÉRIOS', f'Lista oficial de status {doc} carregada (códigos)', len(cod[doc]), None)
     return R

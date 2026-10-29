@@ -25,7 +25,10 @@ LINHA_FORTE = '#0A0A0A'    # line.strong
 LINHA = '#52525B'          # line.default
 LINHA_SUTIL = '#D4D4D8'    # line.subtle – grade, divisores
 LINHA_FRACA = '#E4E4E7'    # line.faint – pontilhados
-DADOS = ('#0A0A0A', '#52525B', '#A1A1AA', '#D4D4D8')   # data.series1..4
+DADOS = ('#0A0A0A', '#52525B', '#A1A1AA', '#D4D4D8')   # data.series1..4 (tons da interface)
+# gráficos: paleta categórica validada (daltonismo e visão normal, ordem fixa – a ordem faz parte da validação;
+# 4 cores ficam abaixo de 3:1 no fundo, por isso as pizzas sempre têm legenda com quantidade e %)
+CATEGORICAS = ('#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948')
 
 # papéis usados pelo restante do código
 FUNDO = BASE
@@ -39,7 +42,7 @@ DESTAQUE_CLARO = AFUNDADO
 PASSAR = AFUNDADO
 LISTRA = '#FAFAFA'
 SELECAO = LINHA_SUTIL
-SERIE = DADOS[:3]
+SERIE = CATEGORICAS[:3]            # linhas: as 3 primeiras valem em todos os pares
 NEUTRO = LINHA_SUTIL
 # estados: o destaque máximo é o preenchimento sólido (sem vermelho/amarelo)
 OK = TEXTO
@@ -53,13 +56,12 @@ RAIO_BOTAO = 2    # border.radius.xs – botões e chips
 CANTONEIRA = 8    # border.cornerBracketSize
 TRACO_FORTE = 2   # border.width.strong
 
-# ---------------------------------------------------------------- pizzas: 4 cinzas + texturas (halftone/hachura)
+# ---------------------------------------------------------------- pizzas: cores categóricas; cinzas para o que não é status
 # (tipo, cor): 'solido' | 'hachura' | 'pontos' | 'cruzado' | 'linhas' | 'grade' | 'vazio'
-PIZZA = (('solido', DADOS[0]), ('solido', DADOS[1]), ('solido', DADOS[2]), ('solido', DADOS[3]),
-         ('hachura', INVERSO), ('pontos', INVERSO), ('cruzado', ACENTO_SUAVE), ('linhas', INVERSO))
-PIZZA_NA = ('hachura', DESABILITADO)
+PIZZA = tuple(('solido', c) for c in CATEGORICAS)
+PIZZA_NA = ('solido', DESABILITADO)
 PIZZA_SEM = ('vazio', DESABILITADO)
-PIZZA_OUTROS = ('grade', TEXTO_MUDO)
+PIZZA_OUTROS = ('hachura', TEXTO_MUDO)
 
 
 def cores_pizza(rotulos_fatias, ordem_oficial):

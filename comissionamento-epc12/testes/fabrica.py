@@ -116,3 +116,38 @@ def hierarquia_malhas(caminho, malhas, emissao='29/10/2026'):
     ws.append([f'{emissao}  09:00:19'])
     wb.save(caminho)
     return caminho
+
+
+def status_malhas(caminho, linhas, filtro='Status FVM: Aprovado, Cancelado, ', emissao='29/10/2026'):
+    """Relatório de Status de Malhas: linhas = [(malha, Nº FVM, status)] – título, filtros, cabeçalho, dados, rodapé."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.cell(1, 5, 'Relatório de Status de Malhas')
+    ws.cell(4, 1, 'Listagem de filtros selecionados:')
+    ws.cell(5, 1, 'Disciplina: INS')
+    ws.cell(8, 1, filtro)
+    ws.cell(10, 6, 'Status de Atividades - FVM')
+    for j, t in enumerate(['Disciplina', 'Malha', 'Descrição', 'FVM', 'Contratada', 'Status', 'No Prazo?'], 1):
+        ws.cell(11, j, t)
+    r = 13
+    for malha, n_fvm, st in linhas:
+        for j, v in enumerate(['INS', malha, 'MALHA DE TESTE', n_fvm or None, 'CONTRATADA TESTE', st or None,
+                               'Data Prevista não Disponível'], 1):
+            ws.cell(r, j, v)
+        r += 1
+    for j, v in enumerate(['Emissão: ', 'USUÁRIO TESTE', None, 'Classificação da Informação: TESTE', None, 'Folha: 1 de 1'], 1):
+        ws.cell(r, j, v)
+    ws.cell(r + 1, 1, f'{emissao}\n\t\t\t09:42:54 AM')
+    wb.save(caminho)
+    return caminho
+
+
+def fvm(pasta, linhas):
+    """Os dois relatórios de FVM a partir de [(malha, SOP, SSOP, status)]: hierarquia (uma TAG por malha e SSOP)
+    e status de malhas (um status por malha). Devolve (hierarquia, status)."""
+    malhas = {}
+    for m, sop, ssop, st in linhas:
+        malhas.setdefault(m, [st, []])[1].append(('TAG', f'T-{m}-{len(malhas[m][1]) + 1}', ssop, sop))
+    h = hierarquia_malhas(pasta / 'fvm_hierarquia.xlsx', [(m, 'OPERAÇÃO', filhos) for m, (_, filhos) in malhas.items()])
+    s = status_malhas(pasta / 'fvm_status.xlsx', [(m, str(100 + i), st) for i, (m, (st, _)) in enumerate(malhas.items())])
+    return h, s

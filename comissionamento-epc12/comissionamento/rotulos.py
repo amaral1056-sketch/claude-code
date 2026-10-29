@@ -21,9 +21,9 @@ COL_TAGS = [('TAG', 'tag', 18, 0), ('SSOP', 'ssop', 27, 0),
 COL_TAGS_XLS = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 28, 0), ('TAG', 'tag', 20, 0),
                 ('Descrição da TAG', 'descricao', 36, 0), ('Nº da FVI', 'n_fvi', 10, 0), ('Status FVI', 'st_fvi', 16, 0),
                 ('FVI Campo II', 'st_cii', 16, 0), ('FVI Campo III', 'st_ciii', 16, 0), ('FVI Campo V', 'st_cv', 16, 0)]
-COL_MALHAS = [('Malha', 'malha', 22, 0), ('SSOP', 'ssop', 27, 0), ('Status da malha', 'status', 18, 0)]
+COL_MALHAS = [('Malha', 'malha', 22, 0), ('TAG', 'tag', 24, 0), ('SSOP', 'ssop', 27, 0), ('Status da FVM', 'status', 16, 0)]
 COL_MALHAS_XLS = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 28, 0), ('Malha', 'malha', 22, 0),
-                  ('Status da malha', 'status', 18, 0), ('Malha em mais de uma SSOP', 'txt_multi', 12, 2)]
+                  ('TAG', 'tag', 24, 0), ('Nº da FVM', 'n_fvm', 10, 0), ('Status da FVM', 'status', 16, 0), ('Malha em mais de uma SSOP', 'txt_multi', 12, 2)]
 _SSOP = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('SSOP', 'ssop', 27, 0), ('Descrição da SSOP', 'descricao', 34, 0)]
 COL_CCM = _SSOP + [('Status do CCM', 'txt_ccm_status', 18, 2)]
 _SOP = [('Unidade', 'unidade', 10, 0), ('SOP', 'sop', 22, 0), ('Descrição do SOP', 'descricao', 46, 0)]

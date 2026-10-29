@@ -31,10 +31,10 @@ def linha_de_comando(a):
             if res == 'VERIFICAR':
                 print(f'VERIFICAR: {teste} = {apurado}')
         if a.exportar:
-            exportacao.exportar_relatorio(R, a.exportar, servico.data_br(b.data_referencia_atual()),
-                                          servico.historico_com_percentuais(b), b.criterios(), b.incluir_sem_fvi,
-                                          b.status_fic())
-            print('relatório:', a.exportar)
+            xlsx, pdf = exportacao.exportar_relatorio(R, a.exportar, servico.data_br(b.data_referencia_atual()),
+                                                      b.incluir_sem_fvi, b.status_fic())
+            print('relatório:', xlsx)
+            print('pdf:', pdf)
     except ErroImportacao as e:
         print('ERRO:', e, file=sys.stderr)
         return 2
@@ -51,7 +51,7 @@ def main():
     ap.add_argument('--importar', nargs=2, action='append', metavar=('TIPO', 'ARQUIVO'),
                     help='importar exportação da FIC: TIPO = FVI, FVM, CCM, TAP ou TTAS')
     ap.add_argument('--data', help='data de referência dd/mm/aaaa (padrão: rodapé do arquivo ou hoje)')
-    ap.add_argument('--exportar', help='gerar o relatório Excel neste arquivo')
+    ap.add_argument('--exportar', help='gerar o relatório Excel neste arquivo (e o PDF com o mesmo nome)')
     ap.add_argument('--versao', action='version', version=__version__)
     a = ap.parse_args()
     if a.li or a.status or a.importar or a.exportar:

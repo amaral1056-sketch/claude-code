@@ -57,12 +57,21 @@ def test_hierarquia_de_malhas(banco, tmp_path):
     ])
     regs, data, info = servico.importar_fic(banco, 'FVM', p)
     assert data == '2026-10-29' and info['malhas'] == 3 and len(info['linhas_ignoradas']) == 2   # rodapé
-    assert [(r['malha'], r['ssop'], r['status']) for r in regs] == [
-        ('M1', f.S1, 'OPERAÇÃO'), ('M2', f.S1, 'PRONTO'), ('M2', f.S2, 'PRONTO'), ('M3', '', 'OPERAÇÃO')]
+    assert [(r['malha'], r['tag'], r['ssop']) for r in regs] == [       # uma linha por TAG/linha da malha
+        ('M1', 'T1', f.S1), ('M1', 'L1', f.S1), ('M2', 'T2', f.S1), ('M2', 'T3', f.S2), ('M3', '', '')]
+    # status da FVM pelo Relatório de Status de Malhas: "Aprovado" é a descrição oficial (APRV / APROVADO)
+    servico.importar_fic(banco, 'FVM', f.status_malhas(tmp_path / 'st.xlsx', [
+        ('M1', '10', 'Aprovado'), ('M2', '11', 'Cancelado'), ('M3', '', ''), ('M9', '12', 'Aprovado')]))
+    assert len(banco.dados('FVM')) == 5                      # a hierarquia não foi substituída
     R = servico.calcular(banco)
+    s1 = next(s for s in R.ssop if s['ssop'] == f.S1)
+    assert (s1['malhas'], s1['fvm_ciii'], s1['fvm_cv']) == (1, 1, 1)   # M1 conta uma vez; M2 cancelada fica fora
+    assert next(m for m in R.malhas if m['malha'] == 'M9')['situacao'] == 'SEM SSOP'   # só no relatório de status
     v = {t: a for _, t, _, a, _ in R.verificacao}
     assert v['FVM – malhas em mais de uma SSOP (pode, mas não deve)'] == 1
-    assert v['FVM – registros sem SSOP'] == 1
+    assert v['FVM – status com código desconhecido'] == 0
+    assert v['FVM – malhas do Relatório de Status que não estão na Hierarquia de Malhas (sem SSOP)'] == 1
+    assert v['FVM – registros sem SSOP'] == 2                # M3 (sem TAG) e M9
 
 
 def test_ccm_sem_numero_conta_pelo_ssop(banco, tmp_path):
@@ -94,7 +103,7 @@ def test_tap_e_ttas_por_sop(banco, tmp_path):
     assert (R.total['pct_tap'], R.total['pct_ttas2']) == (pytest.approx(1 / 3), pytest.approx(1 / 3))
 
 
-def test_banco_antigo_com_tap_por_ssop_e_migrado(tmp_path):
+def test_banco_antigo_e_migrado(tmp_path):
     caminho = tmp_path / 'antigo.db'
     b = Banco(caminho)
     b.fechar()
@@ -102,12 +111,15 @@ def test_banco_antigo_com_tap_por_ssop_e_migrado(tmp_path):
     con.execute('DROP TABLE tap')
     con.execute('CREATE TABLE tap (linha INTEGER PRIMARY KEY, numero TEXT, ssop TEXT, status TEXT)')
     con.execute('CREATE TABLE li_item (linha INTEGER PRIMARY KEY, tag TEXT)')
+    con.execute('DROP TABLE fvm')
+    con.execute('CREATE TABLE fvm (linha INTEGER PRIMARY KEY, malha TEXT, sop TEXT, ssop TEXT, status TEXT)')
     con.commit()
     con.close()
     b = Banco(caminho)
     assert [r[1] for r in b.con.execute('PRAGMA table_info(tap)')] == ['linha', 'numero', 'sop', 'status']
     assert b.con.execute("SELECT COUNT(*) FROM sqlite_master WHERE name = 'li_item'").fetchone()[0] == 0
-    assert b.meta('versao_esquema') == '2'
+    assert [r[1] for r in b.con.execute('PRAGMA table_info(fvm)')] == ['linha', 'malha', 'tag', 'sop', 'ssop', 'status_item']
+    assert b.meta('versao_esquema') == '3'
     b.fechar()
 
 

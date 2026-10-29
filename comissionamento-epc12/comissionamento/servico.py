@@ -4,8 +4,11 @@ import datetime
 from . import calculo, importacao
 from .importacao import ErroImportacao
 
-TIPOS_FIC = ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')
-NOMES = {'FVI': 'Relatório de Cadastro Geral (FVI)', 'FVM': 'FVM', 'CCM': 'CCM', 'TAP': 'TAP', 'TTAS': 'TTAS'}
+TIPOS_FIC = ('FVI', 'FVM', 'FVM_STATUS', 'CCM', 'TAP', 'TTAS')
+TIPOS_MENU = ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')
+NOMES = {'FVI': 'Relatório de Cadastro Geral (FVI)',
+         'FVM': 'FVM (Relatório de Hierarquia de Malhas ou Relatório de Status de Malhas)', 'CCM': 'CCM', 'TAP': 'TAP',
+         'TTAS': 'TTAS'}
 
 
 def importar_li(banco, arquivo):
@@ -34,10 +37,13 @@ def gravar_fic(banco, tipo, arquivo, registros, data_referencia, info=None):
     if not banco.tem_base():
         raise ErroImportacao('Importe primeiro a lista de SOP / SSOP (Importar atualização ▸ SOP / SSOP).')
     data_iso = _iso(data_referencia)
-    obs = ''
+    tipo = (info or {}).get('tipo', tipo)       # FVM: hierarquia (FVM) ou status de malhas (FVM_STATUS)
+    obs = []
     if info and info.get('linhas_ignoradas'):
-        obs = f'{len(info["linhas_ignoradas"])} linha(s) ignorada(s) (cabeçalho repetido ou rodapé)'
-    banco.substituir_dados(tipo, registros, arquivo, data_iso, obs)
+        obs.append(f'{len(info["linhas_ignoradas"])} linha(s) ignorada(s) (cabeçalho repetido ou rodapé)')
+    if info and info.get('filtro_status'):
+        obs.append(f'relatório filtrado – {info["filtro_status"]}')
+    banco.substituir_dados(tipo, registros, arquivo, data_iso, ' · '.join(obs))
     R = calcular(banco)
     banco.gravar_historico(data_iso, R.historico_por_unidade())
     return R
@@ -53,7 +59,7 @@ def importar_fic(banco, tipo, arquivo, data_referencia=None):
 
 def importar_status(banco, arquivo, tipo=None):
     tipo = tipo or importacao.tipo_pelo_nome(arquivo)
-    if tipo not in TIPOS_FIC:
+    if tipo not in TIPOS_MENU:
         raise ErroImportacao(f'Não foi possível identificar o documento (FVI/FVM/CCM/TAP/TTAS) pelo nome do arquivo {arquivo}.')
     lista = importacao.ler_status(arquivo)
     banco.substituir_status_fic(tipo, lista)

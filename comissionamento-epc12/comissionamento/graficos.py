@@ -69,15 +69,26 @@ def textura(estilo, largura, altura, k=1):
     return img
 
 
+def _luminancia(cor):
+    def canal(v):
+        v /= 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (int(cor.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
+    return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b)
+
+
 def texto_sobre(estilo):
-    """Cor de texto legível sobre o estilo (branco só sobre os dois cinzas mais escuros)."""
-    return tema.SOBRE_INVERSO if estilo[0] == 'solido' and estilo[1] in (tema.DADOS[0], tema.DADOS[1]) else tema.TEXTO
+    """Cor de texto legível sobre o estilo: branco ou preto, o de maior contraste com a cor sólida."""
+    if estilo[0] != 'solido':
+        return tema.TEXTO
+    lum = _luminancia(estilo[1])
+    return tema.SOBRE_INVERSO if (1.05 / (lum + 0.05)) > ((lum + 0.05) / (_luminancia(tema.TEXTO) + 0.05)) else tema.TEXTO
 
 
 class Grafico(tk.Canvas):
     """Área de gráfico com título (caixa-alta), subtítulo e legenda; redesenha ao redimensionar."""
 
-    SERIES = ((tema.DADOS[0], (), 'circulo'), (tema.DADOS[1], (6, 3), 'quadrado'), (tema.DADOS[2], (2, 3), 'losango'))
+    SERIES = ((tema.SERIE[0], (), 'circulo'), (tema.SERIE[1], (6, 3), 'quadrado'), (tema.SERIE[2], (2, 3), 'losango'))
 
     def __init__(self, master, titulo, subtitulo='', altura=290):
         super().__init__(master, background=tema.SUPERFICIE, highlightthickness=0, height=int(altura * tema.escala))
@@ -180,8 +191,33 @@ class Grafico(tk.Canvas):
         self.definir(desenhar)
 
 
+def imagem_pizza(fatias, d, fundo=tema.SUPERFICIE, k=4):
+    """Disco da pizza (Pillow em k×, reduzido a d px): fatias = [(quantidade, estilo)] na ordem do desenho.
+    Separadores na cor do fundo e contorno fino. Devolve (imagem RGBA d×d, [(ângulo inicial, final)])."""
+    total = sum(n for n, _ in fatias)
+    img = Image.new('RGBA', (d * k, d * k), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(img)
+    caixa = (k, k, d * k - k - 1, d * k - k - 1)
+    ang, cortes = -90.0, []
+    for n, estilo in fatias:
+        fim = ang + 360.0 * n / total
+        mascara = Image.new('L', img.size, 0)
+        ImageDraw.Draw(mascara).pieslice(caixa, ang, fim, fill=255)
+        img.paste(textura(estilo, *img.size, k=k), (0, 0), mascara)
+        cortes.append((ang, fim))
+        ang = fim
+    if len(fatias) > 1:     # separadores de 2 px
+        r = (caixa[2] - caixa[0]) / 2
+        for a0, _ in cortes:
+            a = math.radians(a0)
+            dr.line((d * k / 2, d * k / 2, d * k / 2 + r * math.cos(a), d * k / 2 + r * math.sin(a)),
+                    fill=fundo, width=2 * k)
+    dr.ellipse(caixa, outline=tema.LINHA_FORTE, width=k)        # contorno (line.strong, 1 px)
+    return img.resize((d, d), Image.LANCZOS), cortes
+
+
 class Pizza(tk.Canvas):
-    """Pizza monocromática (Pillow em 4x): 4 cinzas + texturas, separadores brancos e contorno preto fino.
+    """Pizza (Pillow em 4x) com as cores categóricas, separadores e contorno fino.
     Legenda ao lado (status, quantidade, %); passar o mouse mostra a descrição oficial do status."""
 
     def __init__(self, master, altura=300):
@@ -211,26 +247,8 @@ class Pizza(tk.Canvas):
             return
         d = int(min(h - 16 * e, w * 0.44))
         cx, cy = 8 * e + d / 2, h / 2
-        k = 4
-        img = Image.new('RGBA', (d * k, d * k), (0, 0, 0, 0))
-        dr = ImageDraw.Draw(img)
-        caixa = (k, k, d * k - k - 1, d * k - k - 1)
-        ang, cortes = -90.0, []
-        for rot, n, estilo, _ in self.fatias:
-            fim = ang + 360.0 * n / total
-            mascara = Image.new('L', img.size, 0)
-            ImageDraw.Draw(mascara).pieslice(caixa, ang, fim, fill=255)
-            img.paste(textura(estilo, *img.size, k=k), (0, 0), mascara)
-            cortes.append((ang, fim))
-            ang = fim
-        if len(self.fatias) > 1:     # separadores brancos de 2 px
-            r = (caixa[2] - caixa[0]) / 2
-            for a0, _ in cortes:
-                a = math.radians(a0)
-                dr.line((d * k / 2, d * k / 2, d * k / 2 + r * math.cos(a), d * k / 2 + r * math.sin(a)),
-                        fill=tema.SUPERFICIE, width=2 * k)
-        dr.ellipse(caixa, outline=tema.LINHA_FORTE, width=k)        # contorno (line.strong, 1 px)
-        foto = ImageTk.PhotoImage(img.resize((d, d), Image.LANCZOS), master=self)
+        img, cortes = imagem_pizza([(n, estilo) for _, n, estilo, _ in self.fatias], d)
+        foto = ImageTk.PhotoImage(img, master=self)
         self._imgs.append(foto)
         self.create_image(cx, cy, image=foto)
         self._geo = (cx, cy, d / 2, cortes)

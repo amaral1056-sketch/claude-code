@@ -1,6 +1,6 @@
 # Controle Gerencial de Comissionamento – EPC 12 (programa desktop)
 
-Programa Windows (Python + CustomTkinter/Pillow + SQLite + openpyxl, empacotado com PyInstaller em um .exe único) que substitui a
+Programa Windows (Python + CustomTkinter/Pillow + SQLite + openpyxl + fpdf2, empacotado com PyInstaller em um .exe único) que substitui a
 geração da planilha `CONTROLE_GERENCIAL_EPC12.xlsx`, mantendo as mesmas regras e números. Idioma: **português do Brasil**.
 
 ## Protocolo de trabalho do usuário (obrigatório)
@@ -20,19 +20,19 @@ comissionamento/texto.py     TRIM e comparação sem caixa (equivalentes ao Exce
 comissionamento/padroes.py   critérios padrão e listas oficiais de status (semeiam o banco novo)
 comissionamento/banco.py     esquema SQLite, critérios, parâmetros, log de importações, histórico, backup
 comissionamento/importacao.py leitura das exportações da FIC: Cadastros Básicos (SOP/SSOP; LI antiga também), Cadastro Geral
-                             (FVI), Hierarquia de Malhas (FVM), listas de CCM, TAP e TTAS
+                             (FVI), Hierarquia de Malhas e Status de Malhas (FVM), listas de CCM, TAP e TTAS
 comissionamento/calculo.py   reprodução das fórmulas da planilha (IMP_* auxiliares, abas por SSOP/SOP, visão, verificação)
 comissionamento/servico.py   importar -> gravar -> recalcular -> histórico
-comissionamento/exportacao.py relatório Excel (valores formatados)
+comissionamento/exportacao.py relatório Excel + PDF: só Visão Gerencial, FVI, FVM, CCM, TAP, TTAS, com a logo
 comissionamento/gui.py       interface CustomTkinter: barra lateral com logo, botão Importar atualização (SOP/SSOP + FIC),
                              Visão Gerencial (5 pizzas de status da FIC: FVI, FVM, CCM, TAP, TTAS – geral ou por unidade),
                              FVI TAG a TAG, FVM malha a malha, CCM/TAP/TTAS (status da FIC), Verificação, Histórico,
                              Importações, Critérios. Filtros: Unidade → SOP → SSOP em cascata + TAG/malha ou situação
 comissionamento/recursos/    logo.png (Consórcio HC4, monocromática), icone.ico/icone.png e fontes/ (OFL) – embutidos no .exe pelo .spec
 comissionamento/rotulos.py   TODOS os textos e colunas exibidos (tela e Excel), por extenso – sem abreviações
-comissionamento/tema.py      identidade HUD monocromática (tokens hud-mono-light): cores, fontes, raios, estilos das pizzas
+comissionamento/tema.py      identidade HUD (tokens hud-mono-light) + paleta categórica colorida dos gráficos
 comissionamento/icones.py    ícones de linha padronizados (Pillow, 4x e reduzidos), recurso() e logo()
-comissionamento/graficos.py  gráficos em tk.Canvas: Pizza (Pillow 4x, cinzas + texturas) e linhas, com dica ao passar o mouse
+comissionamento/graficos.py  gráficos em tk.Canvas: Pizza (imagem_pizza, Pillow 4x – usada também no PDF) e linhas
 ferramentas/fonte_display.py gera EPC12 Display (Orbitron com o til redesenhado; nome trocado por exigência da OFL)
 testes/                      sintético (12 casos de borda à mão), importação, layouts da FIC, interface, dados reais (pulado sem dados/)
 ci/teste_exe.py              testa o .exe gerado; .github/workflows/comissionamento-windows.yml gera o .exe no Windows
@@ -57,18 +57,23 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 - Comparações como no Excel: TRIM (só espaço) e sem diferença de maiúsculas.
 - Diferenças deliberadas em relação à planilha: CCM/TAP/TTAS ignoram linhas sem SSOP/SOP **e** sem status (rodapé); linha
   sem número só vale com SSOP/SOP E status (CCMOCULTO); colunas são achadas pelo nome. Sem limites de linhas.
-- FVM = Relatório de Hierarquia de Malhas: linhas MALHA (status da malha) seguidas das TAG/LINHA (com SSOP/SOP; "-" = vazio).
-  Um registro por malha e SSOP. Esse arquivo NÃO traz status de FVM (traz OPERAÇÃO/PRONTO, status do item) – por isso o
-  avanço FVM Campo III/V dá 0 e "código desconhecido" = nº de registros até o usuário definir a regra (pendência 9).
-  Na pizza da Visão cada malha conta uma vez; na tabela, uma linha por SSOP.
+- FVM = dois relatórios da FIC, ambos em Importar atualização ▸ FVM (reconhecidos pelo cabeçalho; cada um substitui só a
+  sua tabela): Hierarquia de Malhas (tabela fvm: uma linha por TAG/LINHA da malha, com SSOP/SOP; "-" = vazio) e Status de
+  Malhas (tabela fvm_status, tipo FVM_STATUS: malha, Nº FVM, Status da FVM como vem – a DESCRIÇÃO, ex.: "Aprovado").
+  O status vale pelo código ou pela descrição oficial; "Aprovado" é descrição de APRV e de APROVADO → conta se algum dos
+  dois estiver nos Critérios (A CONFIRMAR). Avanço: cada malha uma vez por SSOP. Malha só no relatório de status = sem SSOP.
+  Rodapé do relatório de status (linha "Emissão") é descartado – traz nome do emissor. O relatório vem filtrado por status
+  (ex.: "Status FVM: Aprovado, Cancelado"): o filtro fica na observação da importação. Página FVM: Malha, TAG, SSOP,
+  Status da FVM; busca por malha ou TAG; contador = malhas distintas. Pizza da Visão: cada malha uma vez.
 - Textos ao usuário sempre por extenso ("FVI Campo II", "FVM Campo III", "TTAS 1"), definidos em rotulos.py e
   usados igualmente na tela e no Excel. Ícones só do conjunto de icones.py (mesmo traço).
 - ci/teste_exe.py abre o .exe por linha de comando E a interface (variável EPC12_TESTE_INICIO); não remover.
-- Identidade visual (29/10, arquivo hud-mono-light.tokens.json do usuário): só preto/cinzas sobre branco; painéis retos com
-  cantoneiras; botões raio 2; títulos/rótulos/botões em caixa-alta; display EPC12 Display, títulos Rajdhani, corpo IBM Plex Mono,
-  dados Share Tech Mono. Destaque = preenchimento sólido preto (sem vermelho/amarelo). Usar só os tokens de tema.py.
-- Gráficos de linha: no máximo 3 séries (cinza + traço + marcador distinguem); legenda com 2+ séries
-  (com uma só, o título identifica).
+- Identidade visual (29/10, arquivo hud-mono-light.tokens.json do usuário): interface preto/cinzas sobre branco; painéis retos
+  com cantoneiras; botões raio 2; títulos/rótulos/botões em caixa-alta; display EPC12 Display, títulos Rajdhani, corpo IBM Plex
+  Mono, dados Share Tech Mono. Usar só os tokens de tema.py.
+- Gráficos COLORIDOS (pedido do usuário, 29/10): tema.CATEGORICAS = paleta categórica validada (scripts do skill dataviz:
+  daltonismo e visão normal OK; 4 cores < 3:1 no fundo → legenda com quantidade e % sempre visível). Ordem fixa, não mudar
+  sem revalidar. Linhas: as 3 primeiras cores (+ traço e marcador). Texto sobre a fatia: preto ou branco pelo contraste.
 - Layout das telas definido pelo usuário (29/10): Visão Gerencial = pizzas FVI, FVM, CCM, TAP, TTAS (nesta ordem, caixas
   iguais); páginas de acompanhamento mostram o STATUS DA FIC como vem no arquivo (o avanço % continua pelos Critérios);
   FVI/FVM sem coluna Situação; TTAS com "Situação TTAS 1/2". Em 29/10 (2ª): botão Importar base removido; um só botão
@@ -77,8 +82,11 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
   TTAS: status de etapa 2 (TTAS1 sem TTAS1APROVADO, ou TTAS2) ⇒ coluna TTAS 1 = TTAS1APROVADO (inferência, a confirmar).
 - FVM: uma malha PODE, mas NÃO DEVE, pertencer a mais de uma SSOP – conta em cada SSOP, é destacada e vai para a
   Verificação (teste que deve dar 0).
-- Estilo das pizzas: tema.cores_pizza devolve (tipo, cor) – 4 cinzas sólidos e depois texturas (hachura, pontos, cruzado, linhas)
-  seguindo o código na lista oficial; N/A hachura clara, sem status/registro branco, Outros grade; tela e Excel iguais (pattFill).
+- Estilo das pizzas: tema.cores_pizza devolve (tipo, cor) – a cor segue o código na lista oficial (mesmo status, mesma cor);
+  N/A cinza, sem status/registro branco com contorno, Outros hachura cinza; tela, Excel e PDF iguais.
+- Exportação (29/10): só Visão Gerencial, FVI, FVM, CCM, TAP, TTAS – Excel (destino .xlsx; logo em cada aba; números das
+  pizzas abaixo delas, A60+) e PDF de mesmo nome (A4 paisagem, logo/título/data em cada página, fontes embutidas, colunas
+  da tela). Verificação, Pendências, Histórico e Critérios não são mais exportados.
 - Banco: cada importação substitui a anterior do tipo; o histórico guarda contagens por unidade por data de referência.
 
 ## Pendências (perguntas abertas ao usuário)
@@ -90,6 +98,7 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 6. TAGS SEM FVI por SSOP soma também TAGs canceladas (como a planilha); hoje não há TAG cancelada, sem efeito – confirmar a regra.
 7. Modelos da FIC recebidos em 29/10 (SOP/SSOP, FVI, FVM, CCM, TAP, TTAS) – leitores ajustados e testados com eles.
 8. SOP / SSOP com status PRONTO (11 SSOP no modelo, exatamente as sem CCM): entram no denominador? Hoje entram.
-9. FVM: o Relatório de Hierarquia de Malhas não tem status de FVM (Campo III/V). De onde vem o avanço da FVM?
+9. FVM: respondida pelo Relatório de Status de Malhas. Confirmar: "Aprovado" (APRV ou APROVADO?) conta para Campo III e V?
+   E o relatório deve vir sem filtro de status (o modelo veio filtrado em Aprovado, Cancelado).
 10. 5 SSOP do modelo têm SOP fora da lista (incluídos sem descrição) e diluem o % de TAP/TTAS (14 de 19 SOP) – confirmar.
 11. CCMOCULTO: 3 registros com SSOP fora da lista de SOP / SSOP – SSOP removidas ou faltando na lista?

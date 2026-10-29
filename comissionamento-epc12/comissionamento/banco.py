@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import padroes
 
-VERSAO_ESQUEMA = 2   # 2: TAP por SOP; sem LI de Itens / LI de Malhas
+VERSAO_ESQUEMA = 3   # 2: TAP por SOP; sem LI de Itens / LI de Malhas · 3: FVM = hierarquia (por TAG) + status de malhas
 
 ESQUEMA = """
 CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT);
@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS fvi_tag (
     linha INTEGER PRIMARY KEY, tag TEXT, unidade TEXT, sop TEXT, ssop TEXT, classe TEXT, disciplina TEXT,
     malha TEXT, contrato TEXT, n_fvi TEXT, st_fvi TEXT, st_cii TEXT, st_ciii TEXT, st_civ TEXT, st_cv TEXT,
     dados TEXT);
-CREATE TABLE IF NOT EXISTS fvm (linha INTEGER PRIMARY KEY, malha TEXT, sop TEXT, ssop TEXT, status TEXT);
+CREATE TABLE IF NOT EXISTS fvm (linha INTEGER PRIMARY KEY, malha TEXT, tag TEXT, sop TEXT, ssop TEXT, status_item TEXT);
+CREATE TABLE IF NOT EXISTS fvm_status (linha INTEGER PRIMARY KEY, malha TEXT, n_fvm TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS ccm (linha INTEGER PRIMARY KEY, numero TEXT, ssop TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS tap (linha INTEGER PRIMARY KEY, numero TEXT, sop TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS ttas (linha INTEGER PRIMARY KEY, numero TEXT, sop TEXT, status TEXT);
@@ -48,8 +49,8 @@ CREATE TABLE IF NOT EXISTS historico (
     PRIMARY KEY (data_referencia, unidade));
 """
 
-TABELAS_IMPORTACAO = {'FVI': 'fvi_tag', 'FVM': 'fvm', 'CCM': 'ccm', 'TAP': 'tap', 'TTAS': 'ttas'}
-TIPOS_FIC = ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS')
+TABELAS_IMPORTACAO = {'FVI': 'fvi_tag', 'FVM': 'fvm', 'FVM_STATUS': 'fvm_status', 'CCM': 'ccm', 'TAP': 'tap', 'TTAS': 'ttas'}
+TIPOS_FIC = ('FVI', 'FVM', 'FVM_STATUS', 'CCM', 'TAP', 'TTAS')
 COLUNAS_HISTORICO = ('sop', 'ssop', 'tags', 'cii_aplic', 'cii_aprov', 'ciii_aplic', 'ciii_aprov', 'cv_aplic',
                      'cv_aprov', 'malhas', 'fvm_ciii', 'fvm_cv', 'ccm', 'tap', 'ttas1', 'ttas2', 'tags_sem_fvi')
 
@@ -88,6 +89,9 @@ class Banco:
         cols = [r[1] for r in self.con.execute('PRAGMA table_info(tap)')]
         if cols and 'sop' not in cols:
             self.con.execute('DROP TABLE tap')
+        cols = [r[1] for r in self.con.execute('PRAGMA table_info(fvm)')]
+        if cols and 'tag' not in cols:          # esquema 2: FVM sem TAG e com o status do item – importar de novo
+            self.con.execute('DROP TABLE fvm')
         self.con.execute('DROP TABLE IF EXISTS li_item')
         self.con.execute('DROP TABLE IF EXISTS li_malha')
         if self.meta_existe():
