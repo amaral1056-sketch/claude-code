@@ -58,45 +58,95 @@ def numero(n):
 
 # ====================================================================== componentes
 class Cartao(ctk.CTkFrame):
-    def __init__(self, master, **kw):
+    """Painel HUD: superfície, borda fina e cantoneiras pretas de 8 px nos quatro cantos (border.cornerBracketSize)."""
+
+    def __init__(self, master, cantoneiras=True, **kw):
         kw.setdefault('fg_color', tema.SUPERFICIE)
         kw.setdefault('corner_radius', tema.RAIO)
         kw.setdefault('border_width', 1)
-        kw.setdefault('border_color', tema.BORDA)
+        kw.setdefault('border_color', tema.LINHA_SUTIL)
         super().__init__(master, **kw)
+        if cantoneiras:
+            c, t = tema.CANTONEIRA, tema.TRACO_FORTE
+            for relx, rely, anc in ((0, 0, 'nw'), (1, 0, 'ne'), (0, 1, 'sw'), (1, 1, 'se')):
+                for w, h in ((c, t), (t, c)):
+                    tk.Frame(self, width=w, height=h, bg=tema.LINHA_FORTE, highlightthickness=0, bd=0).place(
+                        relx=relx, rely=rely, anchor=anc)
+
+
+class Segmentado(ctk.CTkFrame):
+    """Seletor de opções: a escolhida vira bloco preto com texto branco (accent.solid)."""
+
+    def __init__(self, master, valores, comando=None, altura=30, fonte=12):
+        super().__init__(master, fg_color=tema.AFUNDADO, corner_radius=tema.RAIO_BOTAO, border_width=1,
+                         border_color=tema.LINHA_SUTIL)
+        self._valor, self._comando, self.botoes = valores[0], comando, {}
+        for v in valores:
+            b = ctk.CTkButton(self, text=tema.caixa_alta(v), height=altura - 6, width=40, corner_radius=tema.RAIO_BOTAO,
+                              font=tema.cfonte(fonte, 'bold', 'titulo'), command=lambda v=v: self._escolher(v))
+            b.pack(side='left', padx=2, pady=2)
+            self.botoes[v] = b
+        self._pintar()
+
+    def _pintar(self):
+        for v, b in self.botoes.items():
+            ativo = v == self._valor
+            b.configure(fg_color=tema.INVERSO if ativo else 'transparent', text_color=tema.SOBRE_INVERSO if ativo else tema.TEXTO_2,
+                        hover_color=tema.TEXTO_2 if ativo else tema.LINHA_SUTIL)
+
+    def _escolher(self, v):
+        self.set(v)
+        if self._comando:
+            self._comando(v)
+
+    def get(self):
+        return self._valor
+
+    def set(self, v):
+        self._valor = v
+        self._pintar()
 
 
 def titulo_secao(master, texto, sub=''):
     f = ctk.CTkFrame(master, fg_color='transparent')
-    ctk.CTkLabel(f, text=texto, font=tema.cfonte(16, 'bold'), text_color=tema.TEXTO).pack(anchor='w')
+    ctk.CTkLabel(f, text=tema.caixa_alta(texto), font=tema.cfonte(16, 'bold', 'titulo'), text_color=tema.TEXTO,
+                 height=22).pack(anchor='w')
     if sub:
-        ctk.CTkLabel(f, text=sub, font=tema.cfonte(12), text_color=tema.TEXTO_MUDO).pack(anchor='w')
+        ctk.CTkLabel(f, text=sub, font=tema.cfonte(11), text_color=tema.TEXTO_MUDO, height=16).pack(anchor='w')
     return f
 
 
 def nota(master, texto, largura=1100):
-    return ctk.CTkLabel(master, text=texto, font=tema.cfonte(11), text_color=tema.TEXTO_MUDO, justify='left',
+    return ctk.CTkLabel(master, text=texto, font=tema.cfonte(10), text_color=tema.TEXTO_MUDO, justify='left',
                         wraplength=largura, anchor='w')
 
 
 def estilo_opcoes():
-    return dict(height=36, corner_radius=10, fg_color=tema.FUNDO, button_color=tema.FUNDO,
-                button_hover_color=tema.BORDA, text_color=tema.TEXTO, font=tema.cfonte(12),
-                dropdown_font=tema.cfonte(12), dynamic_resizing=False)
+    return dict(height=32, corner_radius=tema.RAIO_BOTAO, fg_color=tema.AFUNDADO, button_color=tema.AFUNDADO,
+                button_hover_color=tema.LINHA_SUTIL, text_color=tema.TEXTO, font=tema.cfonte(11),
+                dropdown_font=tema.cfonte(11), dropdown_fg_color=tema.BASE, dropdown_hover_color=tema.AFUNDADO,
+                dynamic_resizing=False)
+
+
+def estilo_campo():
+    return dict(height=32, corner_radius=tema.RAIO_BOTAO, border_width=1, border_color=tema.LINHA_SUTIL,
+                fg_color=tema.AFUNDADO, text_color=tema.TEXTO, font=tema.cfonte(11))
 
 
 def botao_sec(master, texto, ic, comando, **kw):
-    """Botão secundário (transparente) com ícone padronizado."""
-    return ctk.CTkButton(master, text=texto, image=icone(ic, tema.TEXTO_2), height=kw.pop('height', 36),
-                         corner_radius=10, fg_color='transparent', hover_color=tema.PASSAR, text_color=tema.TEXTO_2,
-                         font=tema.cfonte(12), command=comando, **kw)
+    """Botão secundário: contorno fino, ícone padronizado, caixa-alta."""
+    return ctk.CTkButton(master, text=tema.caixa_alta(texto), image=icone(ic, tema.TEXTO), height=kw.pop('height', 32),
+                         corner_radius=tema.RAIO_BOTAO, fg_color='transparent', hover_color=tema.AFUNDADO,
+                         border_width=kw.pop('border_width', 1), border_color=tema.LINHA, text_color=tema.TEXTO,
+                         font=tema.cfonte(13, 'bold', 'titulo'), command=comando, **kw)
 
 
 def botao_pri(master, texto, ic, comando, **kw):
-    """Botão principal (azul) com ícone padronizado."""
-    return ctk.CTkButton(master, text=texto, image=icone(ic, '#FFFFFF'), height=kw.pop('height', 36),
-                         corner_radius=10, fg_color=tema.DESTAQUE, hover_color=tema.DESTAQUE_ESCURO,
-                         text_color='#FFFFFF', font=tema.cfonte(12, 'bold'), command=comando, **kw)
+    """Botão principal: bloco preto (accent.solid) com texto branco."""
+    return ctk.CTkButton(master, text=tema.caixa_alta(texto), image=icone(ic, tema.SOBRE_INVERSO),
+                         height=kw.pop('height', 32), corner_radius=tema.RAIO_BOTAO, fg_color=tema.INVERSO,
+                         hover_color=tema.TEXTO_2, text_color=tema.SOBRE_INVERSO, font=tema.cfonte(13, 'bold', 'titulo'),
+                         command=comando, **kw)
 
 
 class Tabela(Cartao):
@@ -107,26 +157,27 @@ class Tabela(Cartao):
         self.colunas = colunas
         ids = [k for _, k, _, _ in colunas]
         self.tree = ttk.Treeview(self, columns=ids, show='headings', height=altura, selectmode='extended')
-        self._f_corpo = tkfont.Font(family=tema.FAMILIA, size=10)
-        self._f_cab = tkfont.Font(family=tema.FAMILIA, size=9, weight='bold')
+        self._f_corpo = tkfont.Font(font=tema.fonte(9))
+        self._f_cab = tkfont.Font(font=tema.fonte(11, 'bold', 'titulo'))
         for titulo, k, larg, p in colunas:
-            self.tree.heading(k, text=titulo, anchor='center' if p == 2 else 'w', command=lambda k=k: self.ordenar(k))
-            self.tree.column(k, width=self._f_cab.measure(titulo) + 30, stretch=True)
-        sy = ctk.CTkScrollbar(self, orientation='vertical', command=self.tree.yview, button_color=tema.BORDA_FORTE,
-                              button_hover_color=tema.EIXO, width=12)
-        sx = ctk.CTkScrollbar(self, orientation='horizontal', command=self.tree.xview, button_color=tema.BORDA_FORTE,
-                              button_hover_color=tema.EIXO, height=12)
+            self.tree.heading(k, text=tema.caixa_alta(titulo), anchor='center' if p == 2 else 'w',
+                              command=lambda k=k: self.ordenar(k))
+            self.tree.column(k, width=self._f_cab.measure(titulo.upper()) + 24, stretch=True)
+        sy = ctk.CTkScrollbar(self, orientation='vertical', command=self.tree.yview, button_color=tema.DESABILITADO,
+                              button_hover_color=tema.LINHA, width=10, corner_radius=0)
+        sx = ctk.CTkScrollbar(self, orientation='horizontal', command=self.tree.xview, button_color=tema.DESABILITADO,
+                              button_hover_color=tema.LINHA, height=10, corner_radius=0)
         self.tree.configure(yscrollcommand=sy.set, xscrollcommand=sx.set)
-        self.tree.grid(row=0, column=0, sticky='nsew', padx=(10, 0), pady=(8, 0))
-        sy.grid(row=0, column=1, sticky='ns', padx=(2, 6), pady=(10, 0))
-        sx.grid(row=1, column=0, sticky='ew', padx=(10, 0), pady=(2, 8))
+        self.tree.grid(row=0, column=0, sticky='nsew', padx=(8, 0), pady=(8, 0))
+        sy.grid(row=0, column=1, sticky='ns', padx=(2, 6), pady=(8, 0))
+        sx.grid(row=1, column=0, sticky='ew', padx=(8, 0), pady=(2, 8))
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
         for tag, kw in (('par', {'background': tema.LISTRA}), ('amarelo', {'background': tema.AMARELO_CRITERIO}),
-                        ('total', {'background': tema.DESTAQUE_CLARO, 'font': tema.fonte(10, 'bold')}),
+                        ('total', {'background': tema.LINHA_FRACA, 'font': tema.fonte(9, 'bold')}),
                         ('alerta', {'background': tema.ERRO_FUNDO, 'foreground': tema.ERRO}),
                         ('aviso', {'background': tema.ALERTA_FUNDO}), ('mudo', {'foreground': tema.TEXTO_MUDO}),
-                        ('ok', {'foreground': tema.OK})):
+                        ('ok', {'foreground': tema.TEXTO, 'font': tema.fonte(9, 'bold')})):
             self.tree.tag_configure(tag, **kw)
         if ao_duplo_clique:
             self.tree.bind('<Double-1>', lambda ev: self.selecionadas() and ao_duplo_clique(self.selecionadas()[0]))
@@ -146,7 +197,7 @@ class Tabela(Cartao):
             # largura pelo conteúdo real (medido com a fonte da tabela), limitada a 'larg' caracteres
             conteudo = max([self._f_corpo.measure(fmt(v, p == 1)) for v in vals] or [0]) + 20
             limite = self._f_corpo.measure('n' * larg) + 20
-            largura = max(self._f_cab.measure(titulo) + 26, min(conteudo, limite), 52)
+            largura = max(self._f_cab.measure(titulo.upper()) + 22, min(conteudo, limite), 48)
             self.tree.column(k, anchor='center' if p == 2 else ('e' if numerica else 'w'), width=largura)
         self.tree.delete(*self.tree.get_children())
         for i, r in enumerate(self.linhas):
@@ -173,14 +224,15 @@ class CartaoGrafico(Cartao):
     def __init__(self, master, titulo, subtitulo, altura=290):
         super().__init__(master)
         self.g = Grafico(self, titulo, subtitulo, altura)
-        self.g.pack(fill='both', expand=True, padx=18, pady=16)
+        self.g.pack(fill='both', expand=True, padx=12, pady=12)
 
 
 # ====================================================================== aplicação
 class App(ctk.CTk):
     def __init__(self, caminho_banco=None):
         ctk.set_appearance_mode('light')
-        super().__init__(fg_color=tema.FUNDO)
+        tema.carregar_fontes()
+        super().__init__(fg_color=tema.BASE)
         self.title(TITULO)
         self.geometry('1440x900')
         self.minsize(1180, 700)
@@ -230,83 +282,84 @@ class App(ctk.CTk):
                            ('Exportar planilhas-modelo (FVM, CCM, TAP, TTAS)…', self.exportar_modelos)])
 
     def _montar(self):
-        lateral = ctk.CTkFrame(self, width=252, fg_color=tema.SUPERFICIE, corner_radius=0)
+        lateral = ctk.CTkFrame(self, width=244, fg_color=tema.SUPERFICIE, corner_radius=0)
         lateral.pack(side='left', fill='y')
         lateral.pack_propagate(False)
-        ctk.CTkFrame(self, width=1, fg_color=tema.BORDA, corner_radius=0).pack(side='left', fill='y')
+        ctk.CTkFrame(self, width=1, fg_color=tema.LINHA_FORTE, corner_radius=0).pack(side='left', fill='y')
 
         marca = ctk.CTkFrame(lateral, fg_color='transparent')
-        marca.pack(fill='x', padx=22, pady=(22, 16))
-        img = logo([configuracao.pasta_programa(), configuracao.pasta_programa() / 'dados'], altura=64)
+        marca.pack(fill='x', padx=16, pady=(20, 12))
+        img = logo([configuracao.pasta_programa(), configuracao.pasta_programa() / 'dados'], altura=56)
         self.logo = ctk.CTkLabel(marca, text='', image=img) if img else ctk.CTkLabel(
-            marca, text='LOGO', width=64, height=64, corner_radius=12, fg_color=tema.FUNDO,
+            marca, text='LOGO', width=56, height=56, corner_radius=0, fg_color=tema.AFUNDADO,
             text_color=tema.TEXTO_MUDO, font=tema.cfonte(9, 'bold'))
         self.logo.pack(anchor='w')
-        ctk.CTkLabel(marca, text='Controle Gerencial de Comissionamento', font=tema.cfonte(12, 'bold'),
-                     text_color=tema.TEXTO, wraplength=200, justify='left').pack(anchor='w', pady=(10, 0))
-        ctk.CTkLabel(marca, text='EPC 12', font=tema.cfonte(11), text_color=tema.TEXTO_MUDO).pack(anchor='w')
+        ctk.CTkLabel(marca, text='CONTROLE GERENCIAL\nDE COMISSIONAMENTO', font=tema.cfonte(11, 'bold', 'display'),
+                     text_color=tema.TEXTO, justify='left').pack(anchor='w', pady=(12, 2))
+        ctk.CTkLabel(marca, text='SYS // EPC-12', font=tema.cfonte(11, tipo='dado'), text_color=tema.TEXTO_MUDO,
+                     height=14).pack(anchor='w')
+        ctk.CTkFrame(lateral, height=1, fg_color=tema.LINHA_SUTIL, corner_radius=0).pack(fill='x', padx=16, pady=(4, 4))
 
         self.nav = {}
         for secao, paginas in SECOES:
-            ctk.CTkLabel(lateral, text=secao, font=tema.cfonte(10, 'bold'), text_color=tema.TEXTO_MUDO).pack(
-                anchor='w', padx=24, pady=(10, 4))
+            ctk.CTkLabel(lateral, text=f'// {secao}', font=tema.cfonte(10, tipo='dado'), text_color=tema.TEXTO_MUDO,
+                         height=16).pack(anchor='w', padx=18, pady=(10, 2))
             for nome in paginas:
-                b = ctk.CTkButton(lateral, text=nome, image=icone(PAGINAS[nome][0], tema.TEXTO_2), anchor='w',
-                                  compound='left', height=40, corner_radius=10, fg_color='transparent',
-                                  hover_color=tema.PASSAR, text_color=tema.TEXTO_2, font=tema.cfonte(13),
-                                  command=lambda n=nome: self.mostrar(n))
-                b.pack(fill='x', padx=14, pady=1)
+                b = ctk.CTkButton(lateral, text=tema.caixa_alta(nome), image=icone(PAGINAS[nome][0], tema.TEXTO_2),
+                                  anchor='w', compound='left', height=32, corner_radius=tema.RAIO_BOTAO,
+                                  fg_color='transparent', hover_color=tema.AFUNDADO, text_color=tema.TEXTO_2,
+                                  font=tema.cfonte(15, 'bold', 'titulo'), command=lambda n=nome: self.mostrar(n))
+                b.pack(fill='x', padx=10, pady=1)
                 self.nav[nome] = b
-        self.selo_ver = ctk.CTkLabel(self.nav['Verificação'], text='', height=22, corner_radius=11,
-                                     fg_color=tema.ERRO_FUNDO, text_color=tema.ERRO, font=tema.cfonte(11, 'bold'))
+        self.selo_ver = ctk.CTkLabel(self.nav['Verificação'], text='', height=18, corner_radius=tema.RAIO_BOTAO,
+                                     fg_color=tema.INVERSO, text_color=tema.SOBRE_INVERSO, font=tema.cfonte(11, tipo='dado'))
 
         rod = ctk.CTkFrame(lateral, fg_color='transparent')
-        rod.pack(side='bottom', fill='x', padx=14, pady=(0, 16))
-        self.btn_banco = botao_sec(rod, 'Banco de dados', 'banco', None, anchor='w', height=38)
+        rod.pack(side='bottom', fill='x', padx=10, pady=(0, 14))
+        self.btn_banco = botao_sec(rod, 'Banco de dados', 'banco', None, anchor='w', border_width=0)
         self.btn_banco.configure(command=lambda: self._abrir_menu(self.btn_banco, self.menu_banco()))
         self.btn_banco.pack(fill='x')
-        self.btn_ajuda = botao_sec(rod, 'Ajuda', 'ajuda', None, anchor='w', height=38)
+        self.btn_ajuda = botao_sec(rod, 'Ajuda', 'ajuda', None, anchor='w', border_width=0)
         self.btn_ajuda.configure(command=lambda: self._abrir_menu(self.btn_ajuda, self._menu([
             ('Como usar', self.ajuda), ('Sobre', self.sobre)])))
         self.btn_ajuda.pack(fill='x')
-        self.lbl_banco = ctk.CTkLabel(rod, text='', font=tema.cfonte(10), text_color=tema.TEXTO_MUDO, anchor='w',
-                                      justify='left', wraplength=210)
-        self.lbl_banco.pack(fill='x', padx=10, pady=(6, 0))
+        self.lbl_banco = ctk.CTkLabel(rod, text='', font=tema.cfonte(10, tipo='dado'), text_color=tema.TEXTO_MUDO,
+                                      anchor='w', justify='left', wraplength=210)
+        self.lbl_banco.pack(fill='x', padx=8, pady=(6, 0))
 
         # área principal
         principal = ctk.CTkFrame(self, fg_color='transparent')
         principal.pack(side='left', fill='both', expand=True)
         topo = ctk.CTkFrame(principal, fg_color='transparent')
-        topo.pack(fill='x', padx=26, pady=(24, 12))
+        topo.pack(fill='x', padx=16, pady=(16, 0))
         txt = ctk.CTkFrame(topo, fg_color='transparent')
         txt.pack(side='left')
-        self.lbl_pagina = ctk.CTkLabel(txt, text='', font=tema.cfonte(26, 'bold'), text_color=tema.TEXTO)
+        self.lbl_trilha = ctk.CTkLabel(txt, text='', font=tema.cfonte(11, tipo='dado'), text_color=tema.TEXTO_MUDO, height=14)
+        self.lbl_trilha.pack(anchor='w')
+        self.lbl_pagina = ctk.CTkLabel(txt, text='', font=tema.cfonte(24, 'bold', 'display'), text_color=tema.TEXTO)
         self.lbl_pagina.pack(anchor='w')
-        self.lbl_sub = ctk.CTkLabel(txt, text='', font=tema.cfonte(13), text_color=tema.TEXTO_MUDO)
+        self.lbl_sub = ctk.CTkLabel(txt, text='', font=tema.cfonte(11), text_color=tema.TEXTO_MUDO, height=16)
         self.lbl_sub.pack(anchor='w')
-        self.btn_exportar = ctk.CTkButton(topo, text='Exportar Excel', image=icone('exportar', tema.TEXTO_2), height=40,
-                                          corner_radius=10, fg_color=tema.SUPERFICIE, hover_color=tema.PASSAR,
-                                          text_color=tema.TEXTO, border_width=1, border_color=tema.BORDA_FORTE,
-                                          font=tema.cfonte(13), command=self.exportar)
+        self.btn_exportar = botao_sec(topo, 'Exportar Excel', 'exportar', self.exportar, height=34)
         self.btn_exportar.pack(side='right')
-        self.btn_importar = botao_pri(topo, 'Importar atualização', 'importar', None, height=40)
+        self.btn_importar = botao_pri(topo, 'Importar atualização', 'importar', None, height=34)
         self.btn_importar.configure(command=lambda: self._abrir_menu(self.btn_importar, self.menu_importar()))
-        self.btn_importar.pack(side='right', padx=10)
-        self.btn_bases = ctk.CTkButton(topo, text='Importar base', image=icone('banco', tema.TEXTO_2), height=40,
-                                       corner_radius=10, fg_color=tema.SUPERFICIE, hover_color=tema.PASSAR,
-                                       text_color=tema.TEXTO, border_width=1, border_color=tema.BORDA_FORTE,
-                                       font=tema.cfonte(13))
+        self.btn_importar.pack(side='right', padx=8)
+        self.btn_bases = botao_sec(topo, 'Importar base', 'banco', None, height=34)
         self.btn_bases.configure(command=lambda: self._abrir_menu(self.btn_bases, self.menu_bases()))
         self.btn_bases.pack(side='right')
-        self.chip_data = ctk.CTkLabel(topo, text='', image=icone('calendario', tema.TEXTO_2), compound='left',
-                                      height=40, corner_radius=10, fg_color=tema.SUPERFICIE, text_color=tema.TEXTO_2,
-                                      font=tema.cfonte(12), padx=14)
-        self.chip_data.pack(side='right', padx=(0, 10))
+        self.chip_data = ctk.CTkLabel(topo, text='', image=icone('calendario', tema.TEXTO_2), compound='left', height=34,
+                                      corner_radius=tema.RAIO_BOTAO, fg_color=tema.AFUNDADO, text_color=tema.TEXTO,
+                                      font=tema.cfonte(12, tipo='dado'), padx=10)
+        self.chip_data.pack(side='right', padx=(0, 8))
+        # linha de base do cabeçalho (line.strong)
+        ctk.CTkFrame(principal, height=2, fg_color=tema.LINHA_FORTE, corner_radius=0).pack(fill='x', padx=16, pady=(10, 12))
 
         self.corpo = ctk.CTkFrame(principal, fg_color='transparent')
-        self.corpo.pack(fill='both', expand=True, padx=26, pady=(4, 0))
-        self.status = ctk.CTkLabel(principal, text='', font=tema.cfonte(11), text_color=tema.TEXTO_MUDO, anchor='w')
-        self.status.pack(fill='x', padx=34, pady=(4, 10))
+        self.corpo.pack(fill='both', expand=True, padx=16, pady=(0, 0))
+        self.status = ctk.CTkLabel(principal, text='', font=tema.cfonte(10, tipo='dado'), text_color=tema.TEXTO_MUDO,
+                                   anchor='w', height=18)
+        self.status.pack(fill='x', padx=18, pady=(4, 8))
 
         self.paginas = {}
         for nome, montar in (('Visão Gerencial', self._pg_visao), ('FVI', self._pg_fvi), ('FVM', self._pg_fvm),
@@ -324,12 +377,16 @@ class App(ctk.CTk):
     def mostrar(self, nome):
         if self.pagina_atual:
             self.paginas[self.pagina_atual].pack_forget()
-            self.nav[self.pagina_atual].configure(fg_color='transparent', text_color=tema.TEXTO_2, font=tema.cfonte(13),
+            self.nav[self.pagina_atual].configure(fg_color='transparent', text_color=tema.TEXTO_2,
+                                                  hover_color=tema.AFUNDADO,
                                                   image=icone(PAGINAS[self.pagina_atual][0], tema.TEXTO_2))
         self.paginas[nome].pack(fill='both', expand=True)
-        self.nav[nome].configure(fg_color=tema.DESTAQUE_CLARO, text_color=tema.DESTAQUE_ESCURO,
-                                 image=icone(PAGINAS[nome][0], tema.DESTAQUE), font=tema.cfonte(13, 'bold'))
-        self.lbl_pagina.configure(text=nome)
+        # item ativo = bloco preto com texto branco (background.inverse)
+        self.nav[nome].configure(fg_color=tema.INVERSO, text_color=tema.SOBRE_INVERSO, hover_color=tema.INVERSO,
+                                 image=icone(PAGINAS[nome][0], tema.SOBRE_INVERSO))
+        secao = next(sec for sec, pgs in SECOES if nome in pgs)
+        self.lbl_trilha.configure(text=f'EPC-12 // {secao} // {tema.caixa_alta(nome)}')
+        self.lbl_pagina.configure(text=tema.caixa_alta(nome))
         self.lbl_sub.configure(text=PAGINAS[nome][1])
         self.pagina_atual = nome
 
@@ -338,39 +395,38 @@ class App(ctk.CTk):
         barra = Cartao(f)
         barra.pack(fill='x', pady=(0, 12))
         dentro = ctk.CTkFrame(barra, fg_color='transparent')
-        dentro.pack(fill='x', padx=14, pady=10)
-        ctk.CTkLabel(dentro, text='Status da FIC em cada documento', font=tema.cfonte(13, 'bold'),
+        dentro.pack(fill='x', padx=12, pady=8)
+        ctk.CTkLabel(dentro, text='STATUS DA FIC EM CADA DOCUMENTO', font=tema.cfonte(15, 'bold', 'titulo'),
                      text_color=tema.TEXTO).pack(side='left')
         self.cb_visao = ctk.CTkOptionMenu(dentro, values=[TODAS_UNIDADES], width=190,
                                           command=lambda v: self._atualizar_visao(), **estilo_opcoes())
         self.cb_visao.pack(side='right')
-        sc = self.visao_rolagem = ctk.CTkScrollableFrame(f, fg_color='transparent',
-                                                         scrollbar_button_color=tema.BORDA_FORTE)
+        sc = self.visao_rolagem = ctk.CTkScrollableFrame(f, fg_color='transparent', corner_radius=0,
+                                                         scrollbar_button_color=tema.DESABILITADO,
+                                                         scrollbar_button_hover_color=tema.LINHA)
         sc.pack(fill='both', expand=True)
         grade = ctk.CTkFrame(sc, fg_color='transparent')
         grade.pack(fill='x')
         self.pizzas, self.sub_pizza = {}, {}
         # ordem pedida: FVI, FVM, CCM, TAP, TTAS – caixas todas do mesmo tamanho
         for i, (k, titulo) in enumerate((('FVI', 'FVI'), ('FVM', 'FVM'), ('CCM', 'CCM'), ('TAP', 'TAP'), ('TTAS', 'TTAS'))):
-            c = Cartao(grade, height=int(372 * tema.escala))
-            c.grid(row=i // 2, column=i % 2, sticky='nsew', padx=(0 if i % 2 == 0 else 14, 0), pady=(0, 14))
+            c = Cartao(grade, height=int(356 * tema.escala))
+            c.grid(row=i // 2, column=i % 2, sticky='nsew', padx=(0 if i % 2 == 0 else 12, 0), pady=(0, 12))
             c.grid_propagate(False)
             c.pack_propagate(False)
             cab = ctk.CTkFrame(c, fg_color='transparent')
-            cab.pack(fill='x', padx=20, pady=(16, 0))
-            ctk.CTkLabel(cab, text=titulo, font=tema.cfonte(16, 'bold'), text_color=tema.TEXTO).pack(side='left')
+            cab.pack(fill='x', padx=14, pady=(12, 0))
+            ctk.CTkLabel(cab, text=titulo, font=tema.cfonte(20, 'bold', 'display'), text_color=tema.TEXTO).pack(side='left')
             if k == 'FVI':
-                self.seg_fvi = ctk.CTkSegmentedButton(
-                    cab, values=['Status FVI', 'Campo II', 'Campo III', 'Campo V'], command=lambda v: self._atualizar_visao(),
-                    selected_color='#CFE0F8', selected_hover_color='#BBD3F5', unselected_color=tema.FUNDO,
-                    unselected_hover_color=tema.BORDA, fg_color=tema.FUNDO, text_color=tema.TEXTO,
-                    font=tema.cfonte(11), height=28, corner_radius=8)
-                self.seg_fvi.set('Status FVI')
+                self.seg_fvi = Segmentado(cab, ['Status FVI', 'Campo II', 'Campo III', 'Campo V'],
+                                          lambda v: self._atualizar_visao(), altura=28, fonte=11)
                 self.seg_fvi.pack(side='right')
-            self.sub_pizza[k] = ctk.CTkLabel(c, text='', font=tema.cfonte(12), text_color=tema.TEXTO_MUDO, anchor='w')
-            self.sub_pizza[k].pack(fill='x', padx=20)
-            self.pizzas[k] = Pizza(c, altura=290)
-            self.pizzas[k].pack(fill='both', expand=True, padx=20, pady=(4, 14))
+            self.sub_pizza[k] = ctk.CTkLabel(c, text='', font=tema.cfonte(11, tipo='dado'), text_color=tema.TEXTO_MUDO,
+                                             anchor='w', height=16)
+            self.sub_pizza[k].pack(fill='x', padx=14)
+            ctk.CTkFrame(c, height=1, fg_color=tema.LINHA_SUTIL, corner_radius=0).pack(fill='x', padx=14, pady=(6, 0))
+            self.pizzas[k] = Pizza(c, altura=280)
+            self.pizzas[k].pack(fill='both', expand=True, padx=14, pady=(6, 12))
         grade.columnconfigure(0, weight=1, uniform='p')
         grade.columnconfigure(1, weight=1, uniform='p')
 
@@ -379,16 +435,15 @@ class App(ctk.CTk):
         barra = Cartao(f)
         barra.pack(fill='x', pady=(0, 12))
         dentro = ctk.CTkFrame(barra, fg_color='transparent')
-        dentro.pack(fill='x', padx=14, pady=12)
-        d['contagem'] = ctk.CTkLabel(dentro, text='', height=30, corner_radius=15, fg_color=tema.DESTAQUE_CLARO,
-                                     text_color=tema.DESTAQUE_ESCURO, font=tema.cfonte(12, 'bold'), padx=12)
+        dentro.pack(fill='x', padx=12, pady=10)
+        d['contagem'] = ctk.CTkLabel(dentro, text='', height=28, corner_radius=tema.RAIO_BOTAO, fg_color=tema.INVERSO,
+                                     text_color=tema.SOBRE_INVERSO, font=tema.cfonte(13, tipo='dado'), padx=10)
         d['contagem'].pack(side='right')
         d['unidade'] = ctk.CTkOptionMenu(dentro, values=[TODAS_UNIDADES], width=170,
                                          command=lambda v: self._mudou_unidade(d), **estilo_opcoes())
         d['unidade'].pack(side='left')
-        estilo_cb = dict(height=36, corner_radius=10, border_width=1, border_color=tema.BORDA, fg_color=tema.FUNDO,
-                         button_color=tema.FUNDO, button_hover_color=tema.BORDA, text_color=tema.TEXTO,
-                         font=tema.cfonte(12), dropdown_font=tema.cfonte(12))
+        estilo_cb = dict(**estilo_campo(), button_color=tema.AFUNDADO, button_hover_color=tema.LINHA_SUTIL,
+                         dropdown_font=tema.cfonte(11), dropdown_fg_color=tema.BASE, dropdown_hover_color=tema.AFUNDADO)
         d['sop'] = ctk.CTkComboBox(dentro, values=[TODOS_SOP], width=210, command=lambda v: self._mudou_sop(d), **estilo_cb)
         d['sop'].set(TODOS_SOP)
         d['sop'].pack(side='left', padx=(10, 0))
@@ -403,8 +458,7 @@ class App(ctk.CTk):
                                               command=lambda v: self._preencher(d), **estilo_opcoes())
             d['situacao'].pack(side='left', padx=(10, 0))
         if d.get('ident'):
-            d['busca'] = ctk.CTkEntry(dentro, placeholder_text=d['dica_busca'], width=190, height=36, corner_radius=10,
-                                      border_width=1, border_color=tema.BORDA, fg_color=tema.FUNDO, font=tema.cfonte(12))
+            d['busca'] = ctk.CTkEntry(dentro, placeholder_text=d['dica_busca'], width=190, **estilo_campo())
             d['busca'].pack(side='left', padx=(10, 0))
             d['busca'].bind('<KeyRelease>', lambda ev: self._agendar(d))
         botao_sec(dentro, 'Limpar filtros', 'limpar', lambda: self._limpar(d)).pack(side='left', padx=(6, 0))
@@ -412,8 +466,8 @@ class App(ctk.CTk):
     def _pg_fvi(self, f):
         d = self.fvi = {'nome': 'FVI', 'ident': 'tag', 'dica_busca': 'Buscar TAG'}
         self._filtros(f, d)
-        nota(f, 'Status como vêm da FIC (Relatório de Cadastro Geral). Linhas em amarelo: TAG sem FVI gerada · '
-                'em vermelho: sem SSOP ou SSOP fora da base · em cinza: TAG cancelada. O que conta como aprovado no '
+        nota(f, 'Status como vêm da FIC (Relatório de Cadastro Geral). Linha cinza: TAG sem FVI gerada · '
+                'linha preta: sem SSOP ou SSOP fora da base · texto claro: TAG cancelada. O que conta como aprovado no '
                 'avanço está na página Critérios.').pack(side='bottom', fill='x', pady=(8, 0))
         d['tabela'] = Tabela(f, rotulos.COL_TAGS)
         d['tabela'].pack(fill='both', expand=True)
@@ -422,7 +476,7 @@ class App(ctk.CTk):
         d = self.fvm = {'nome': 'FVM', 'ident': 'malha', 'dica_busca': 'Buscar malha'}
         self._filtros(f, d)
         nota(f, 'Status como vem da FIC. Uma malha pode, mas não deve, pertencer a mais de uma SSOP: nesse caso ela aparece '
-                'uma vez em cada SSOP, com a linha em amarelo, e entra na página Verificação. Layout da planilha de FVM '
+                'uma vez em cada SSOP, com a linha em cinza, e entra na página Verificação. Layout da planilha de FVM '
                 'ainda provisório: MALHA | SOP | SSOP | STATUS.').pack(
             side='bottom', fill='x', pady=(8, 0))
         d['tabela'] = Tabela(f, rotulos.COL_MALHAS)
@@ -452,7 +506,7 @@ class App(ctk.CTk):
         barra = Cartao(f)
         barra.pack(fill='x', pady=(0, 12))
         dentro = ctk.CTkFrame(barra, fg_color='transparent')
-        dentro.pack(fill='x', padx=14, pady=12)
+        dentro.pack(fill='x', padx=12, pady=10)
         self.cb_hist = ctk.CTkOptionMenu(dentro, values=['TOTAL'], width=200,
                                          command=lambda v: self._preencher_historico(), **estilo_opcoes())
         self.cb_hist.pack(side='left')
@@ -474,18 +528,14 @@ class App(ctk.CTk):
         par = Cartao(f)
         par.pack(fill='x', pady=(0, 12))
         dentro = ctk.CTkFrame(par, fg_color='transparent')
-        dentro.pack(fill='x', padx=18, pady=14)
-        ctk.CTkLabel(dentro, text='TAGs sem FVI gerada entram no cálculo do FVI?', font=tema.cfonte(13, 'bold'),
+        dentro.pack(fill='x', padx=12, pady=10)
+        ctk.CTkLabel(dentro, text='TAGS SEM FVI GERADA ENTRAM NO CÁLCULO DO FVI?', font=tema.cfonte(15, 'bold', 'titulo'),
                      text_color=tema.TEXTO).pack(side='left')
-        self.seg_sem_fvi = ctk.CTkSegmentedButton(dentro, values=['Sim', 'Não'], command=lambda v: self.mudar_parametro(),
-                                                  selected_color='#CFE0F8', selected_hover_color='#BBD3F5',
-                                                  unselected_color=tema.FUNDO, unselected_hover_color=tema.BORDA,
-                                                  fg_color=tema.FUNDO, text_color=tema.TEXTO, font=tema.cfonte(12, 'bold'),
-                                                  height=34, width=150, corner_radius=10)
-        self.seg_sem_fvi.pack(side='left', padx=14)
+        self.seg_sem_fvi = Segmentado(dentro, ['Sim', 'Não'], lambda v: self.mudar_parametro())
+        self.seg_sem_fvi.pack(side='left', padx=12)
         ctk.CTkLabel(dentro, text='Sim = TAG sem FVI conta como pendente (visão conservadora). '
                                   'Não = só TAGs com FVI entram nos percentuais.',
-                     font=tema.cfonte(11), text_color=tema.TEXTO_MUDO).pack(side='left')
+                     font=tema.cfonte(10), text_color=tema.TEXTO_MUDO).pack(side='left')
         corpo = ctk.CTkFrame(f, fg_color='transparent')
         corpo.pack(fill='both', expand=True)
         dir_ = ctk.CTkFrame(corpo, fg_color='transparent')
@@ -499,25 +549,24 @@ class App(ctk.CTk):
         esq = ctk.CTkFrame(corpo, fg_color='transparent')
         esq.pack(side='left', fill='both', expand=True)
         titulo_secao(esq, 'Códigos que contam como etapa aprovada',
-                     'Linhas em amarelo: incluídas pela lógica do fluxo da FIC, ainda a confirmar').pack(fill='x', pady=(0, 8))
+                     'Linhas em cinza: incluídas pela lógica do fluxo da FIC, ainda a confirmar').pack(fill='x', pady=(0, 8))
         form = Cartao(esq)
         form.pack(side='bottom', fill='x', pady=(12, 0))
         fi = ctk.CTkFrame(form, fg_color='transparent')
-        fi.pack(fill='x', padx=14, pady=12)
+        fi.pack(fill='x', padx=12, pady=10)
         self.cb_etapa = ctk.CTkOptionMenu(fi, values=list(ETAPAS), width=150, **estilo_opcoes())
         self.cb_etapa.set('Etapa')
         self.cb_etapa.pack(side='left')
-        self.cb_codigo = ctk.CTkComboBox(fi, values=[], width=190, height=36, corner_radius=10, border_width=1,
-                                         border_color=tema.BORDA, fg_color=tema.FUNDO, button_color=tema.FUNDO,
-                                         button_hover_color=tema.BORDA, font=tema.cfonte(12), dropdown_font=tema.cfonte(12))
+        self.cb_codigo = ctk.CTkComboBox(fi, values=[], width=190, **estilo_campo(), button_color=tema.AFUNDADO,
+                                         button_hover_color=tema.LINHA_SUTIL, dropdown_font=tema.cfonte(11),
+                                         dropdown_fg_color=tema.BASE, dropdown_hover_color=tema.AFUNDADO)
         self.cb_codigo.set('Código de status')
         self.cb_codigo.pack(side='left', padx=8)
-        self.en_origem = ctk.CTkEntry(fi, placeholder_text='Origem / justificativa', height=36, corner_radius=10,
-                                      border_width=1, border_color=tema.BORDA, fg_color=tema.FUNDO, font=tema.cfonte(12))
+        self.en_origem = ctk.CTkEntry(fi, placeholder_text='Origem / justificativa', **estilo_campo())
         self.en_origem.pack(side='left', fill='x', expand=True)
         botao_pri(fi, 'Adicionar', 'mais', self.adicionar_criterio, width=120).pack(side='left', padx=(8, 0))
         bt = ctk.CTkFrame(form, fg_color='transparent')
-        bt.pack(fill='x', padx=14, pady=(0, 12))
+        bt.pack(fill='x', padx=12, pady=(0, 10))
         botao_sec(bt, 'Remover selecionados', 'lixeira', self.remover_criterio).pack(side='left', padx=(0, 6))
         botao_sec(bt, 'Restaurar critérios padrão', 'restaurar', self.restaurar_criterios).pack(side='left')
         self.t_crit = Tabela(esq, rotulos.COL_CRIT, altura=10)
@@ -712,8 +761,8 @@ class App(ctk.CTk):
             raise
         R = self.R
         data = servico.data_br(b.data_referencia_atual())
-        self.chip_data.configure(text=f'Data de referência: {data or "sem importação"}')
-        self.lbl_banco.configure(text=f'{b.caminho.name}\nversão {__version__}')
+        self.chip_data.configure(text=f'REF {data or "--/--/----"}')
+        self.lbl_banco.configure(text=f'DB {b.caminho.name}\nv{__version__}')
         self.title(f'{TITULO} – {b.caminho.name}')
         unidades = [TODAS_UNIDADES] + R.unidades
         self._sop_de_ssop = {s['ssop']: s['sop'] for s in R.ssop}

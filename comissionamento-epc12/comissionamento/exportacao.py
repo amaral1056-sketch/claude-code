@@ -5,6 +5,8 @@ from openpyxl import Workbook
 from openpyxl.chart import PieChart, Reference
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.series import DataPoint
+from openpyxl.drawing.colors import ColorChoice
+from openpyxl.drawing.fill import PatternFillProperties
 from openpyxl.formatting.rule import ColorScaleRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter as L
@@ -13,15 +15,17 @@ from . import rotulos, tema
 from .importacao import CABECALHO_MODELO
 from .rotulos import COL_VISAO, NOTAS_VISAO
 
-F = 'Segoe UI'
-HF = Font(name=F, bold=True, color='FFFFFF', size=10)
-HFILL = PatternFill('solid', fgColor='2A5FA8')
-NF = Font(name=F, size=10)
-BF = Font(name=F, size=10, bold=True)
-TOTAL_FILL = PatternFill('solid', fgColor='EAF2FD')
-AMARELO = PatternFill('solid', fgColor='FFF4D6')
-VERMELHO = PatternFill('solid', fgColor='FBE9E5')
-LINHA = Border(bottom=Side(style='thin', color='E1E5EA'))
+# identidade HUD monocromática; no Excel, fontes presentes em qualquer Windows: Bahnschrift (títulos) e Consolas (dados)
+F_TIT, F = 'Bahnschrift', 'Consolas'
+HF = Font(name=F_TIT, bold=True, color='FFFFFF', size=10)
+HFILL = PatternFill('solid', fgColor='0A0A0A')
+NF = Font(name=F, size=10, color='0A0A0A')
+BF = Font(name=F, size=10, bold=True, color='0A0A0A')
+TOTAL_FILL = PatternFill('solid', fgColor='E4E4E7')
+AMARELO = PatternFill('solid', fgColor='EBEBED')      # aviso: cinza (sunken)
+VERMELHO = PatternFill('solid', fgColor='D4D4D8')     # alerta: cinza mais forte
+LINHA = Border(bottom=Side(style='thin', color='D4D4D8'))
+TEXTURA_XLS = {'hachura': 'wdDnDiag', 'pontos': 'pct25', 'cruzado': 'diagCross', 'linhas': 'narHorz', 'grade': 'smGrid'}
 PCT = '0.0%'
 
 
@@ -35,9 +39,8 @@ def _cabecalho(ws, colunas, linha=1, col0=1):
 
 
 def _escala(ws, rng):
-    ws.conditional_formatting.add(rng, ColorScaleRule(start_type='num', start_value=0, start_color='F6C7BC',
-                                                      mid_type='num', mid_value=0.5, mid_color='FCEBB6',
-                                                      end_type='num', end_value=1, end_color='BFE3C8'))
+    ws.conditional_formatting.add(rng, ColorScaleRule(start_type='num', start_value=0, start_color='FFFFFF',
+                                                      end_type='num', end_value=1, end_color='A1A1AA'))
 
 
 def _tabela(ws, colunas, linhas, linha0=1, col0=1, filtro=True):
@@ -77,11 +80,17 @@ def _pizza(ws, dados, titulo, a, b, ancora, cores):
     g.set_categories(Reference(dados, min_col=1, min_row=a, max_row=b))
     g.height, g.width = 8.5, 15
     s = g.series[0]
-    for i, cor in enumerate(cores):
+    for i, (tipo, cor) in enumerate(cores):
         cor = cor.lstrip('#').upper()
         pt = DataPoint(idx=i)
-        pt.graphicalProperties.solidFill = cor
-        pt.graphicalProperties.line.solidFill = 'FFFFFF'
+        if tipo == 'solido':
+            pt.graphicalProperties.solidFill = cor
+        elif tipo == 'vazio':
+            pt.graphicalProperties.solidFill = 'FFFFFF'
+        else:   # textura nativa do Excel, mesma ideia da tela
+            pt.graphicalProperties.pattFill = PatternFillProperties(
+                prst=TEXTURA_XLS[tipo], fgClr=ColorChoice(srgbClr=cor), bgClr=ColorChoice(srgbClr='FFFFFF'))
+        pt.graphicalProperties.line.solidFill = '0A0A0A'
         s.dPt.append(pt)
     s.dLbls = DataLabelList()
     s.dLbls.showPercent, s.dLbls.showVal, s.dLbls.showCatName, s.dLbls.showSerName = True, False, False, False
@@ -99,10 +108,11 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
     ws = wb.active
     ws.title = 'Visão Gerencial'
     ws.sheet_view.showGridLines = False
-    ws.cell(1, 1, 'Visão Gerencial – Acompanhamento do Comissionamento – EPC 12').font = Font(name=F, bold=True, size=15)
+    ws.cell(1, 1, 'VISÃO GERENCIAL // ACOMPANHAMENTO DO COMISSIONAMENTO // EPC-12').font = Font(name=F_TIT, bold=True,
+                                                                                               size=15, color='0A0A0A')
     ws.cell(2, 1, f'Data de referência: {data_referencia or "–"}   ·   Gerado em {datetime.datetime.now():%d/%m/%Y %H:%M}'
                   f'   ·   TAGs sem FVI gerada entram no cálculo do FVI: {"Sim" if incluir_sem_fvi else "Não"}').font = Font(
-        name=F, size=10, color='5F6670')
+        name=F, size=10, color='71717A')
     # distribuição dos status da FIC (geral) em aba própria; as pizzas leem dela
     dados = wb.create_sheet('Dados dos gráficos')
     fontes = (('FVI', 'Status FVI por TAG', [t['st_fvi'] for t in R.tags]),
@@ -128,7 +138,7 @@ def exportar_relatorio(R, destino, data_referencia='', historico=(), criterios=(
     for j_ in range(1, len(COL_VISAO) + 1):
         dados.cell(fim, j_).font, dados.cell(fim, j_).fill = BF, TOTAL_FILL
     for i_, t in enumerate(NOTAS_VISAO, fim + 2):
-        dados.cell(i_, 1, t).font = Font(name=F, italic=True, size=9, color='5F6670')
+        dados.cell(i_, 1, t).font = Font(name=F, italic=True, size=9, color='71717A')
     dados.freeze_panes = None
 
     # ---------------------------------------------------------------- FVI e FVM (item a item)

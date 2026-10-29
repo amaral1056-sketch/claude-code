@@ -115,8 +115,12 @@ def test_relatorio_excel_e_backup(banco, tmp_path):
     assert all(type(g).__name__ == 'PieChart' for g in vg._charts)
     # mesma cor da tela para o mesmo status (APROVADO é a fatia maior do FVI)
     ordem_fvi = [c for d, c, _ in banco.status_fic() if d == 'FVI']
-    cor_tela = tema.cores_pizza(['APROVADO'], ordem_fvi)[0].lstrip('#').upper()
-    assert vg._charts[0].series[0].dPt[0].graphicalProperties.solidFill.srgbClr == cor_tela
+    tipo, cor = tema.cores_pizza(['APROVADO'], ordem_fvi)[0]
+    assert tipo == 'solido' and cor in tema.DADOS                          # paleta monocromática
+    assert vg._charts[0].series[0].dPt[0].graphicalProperties.solidFill.srgbClr == cor.lstrip('#').upper()
+    # a partir da 5ª cor da lista oficial, textura (hachura/halftone) em vez de outra cor
+    assert [t for t, _ in tema.cores_pizza(['A', 'B', 'C', 'D', 'E', 'F'], ['A', 'B', 'C', 'D', 'E', 'F'])] == [
+        'solido', 'solido', 'solido', 'solido', 'hachura', 'pontos']
     assert vg.max_row <= 2                                       # só título e gráficos
     dg = wb['Dados dos gráficos']
     assert [dg.cell(1, 1).value, dg.cell(2, 1).value, dg.cell(3, 1).value, dg.cell(3, 2).value] == [

@@ -27,11 +27,12 @@ comissionamento/gui.py       interface CustomTkinter: barra lateral com logo, bo
                              Visão Gerencial (5 pizzas de status da FIC: FVI, FVM, CCM, TAP, TTAS – geral ou por unidade),
                              FVI TAG a TAG, FVM malha a malha, CCM/TAP/TTAS (status da FIC), Verificação, Histórico,
                              Importações, Critérios. Filtros: Unidade → SOP → SSOP em cascata + TAG/malha ou situação
-comissionamento/recursos/    logo.png (Consórcio HC4), icone.ico/icone.png – embutidos no .exe pelo .spec
+comissionamento/recursos/    logo.png (Consórcio HC4, monocromática), icone.ico/icone.png e fontes/ (OFL) – embutidos no .exe pelo .spec
 comissionamento/rotulos.py   TODOS os textos e colunas exibidos (tela e Excel), por extenso – sem abreviações
-comissionamento/tema.py      paleta suave, fontes e estilo das tabelas; cores de série validadas p/ daltonismo (3 cores)
+comissionamento/tema.py      identidade HUD monocromática (tokens hud-mono-light): cores, fontes, raios, estilos das pizzas
 comissionamento/icones.py    ícones de linha padronizados (Pillow, 4x e reduzidos), recurso() e logo()
-comissionamento/graficos.py  gráficos em tk.Canvas: Pizza (Pillow 4x), colunas agrupadas e linhas, com dica ao passar o mouse
+comissionamento/graficos.py  gráficos em tk.Canvas: Pizza (Pillow 4x, cinzas + texturas) e linhas, com dica ao passar o mouse
+ferramentas/fonte_display.py gera EPC12 Display (Orbitron com o til redesenhado; nome trocado por exigência da OFL)
 testes/                      sintético (12 casos de borda à mão), importação, interface, dados reais (pulado sem dados/)
 ci/teste_exe.py              testa o .exe gerado; .github/workflows/comissionamento-windows.yml gera o .exe no Windows
 ```
@@ -53,7 +54,10 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 - Textos ao usuário sempre por extenso ("FVI Campo II", "FVM Campo III", "TTAS 1"), definidos em rotulos.py e
   usados igualmente na tela e no Excel. Ícones só do conjunto de icones.py (mesmo traço).
 - ci/teste_exe.py abre o .exe por linha de comando E a interface (variável EPC12_TESTE_INICIO); não remover.
-- Gráficos: no máximo 3 séries por gráfico (paleta validada só até 3 cores em todos os pares); legenda com 2+ séries
+- Identidade visual (29/10, arquivo hud-mono-light.tokens.json do usuário): só preto/cinzas sobre branco; painéis retos com
+  cantoneiras; botões raio 2; títulos/rótulos/botões em caixa-alta; display EPC12 Display, títulos Rajdhani, corpo IBM Plex Mono,
+  dados Share Tech Mono. Destaque = preenchimento sólido preto (sem vermelho/amarelo). Usar só os tokens de tema.py.
+- Gráficos de linha: no máximo 3 séries (cinza + traço + marcador distinguem); legenda com 2+ séries
   (com uma só, o título identifica).
 - Layout das telas definido pelo usuário (29/10): Visão Gerencial = pizzas FVI, FVM, CCM, TAP, TTAS (nesta ordem, caixas
   iguais); páginas de acompanhamento mostram o STATUS DA FIC como vem no arquivo (o avanço % continua pelos Critérios);
@@ -63,7 +67,8 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
   TTAS: status de etapa 2 (TTAS1 sem TTAS1APROVADO, ou TTAS2) ⇒ coluna TTAS 1 = TTAS1APROVADO (inferência, a confirmar).
 - FVM: uma malha PODE, mas NÃO DEVE, pertencer a mais de uma SSOP – conta em cada SSOP, é destacada e vai para a
   Verificação (teste que deve dar 0). O mesmo teste vale para a LI de Malhas.
-- Cores das pizzas: tema.cores_pizza – a cor segue o código (lista oficial), cinzas para N/A/sem status/Outros; tela e Excel iguais.
+- Estilo das pizzas: tema.cores_pizza devolve (tipo, cor) – 4 cinzas sólidos e depois texturas (hachura, pontos, cruzado, linhas)
+  seguindo o código na lista oficial; N/A hachura clara, sem status/registro branco, Outros grade; tela e Excel iguais (pattFill).
 - Banco: cada importação substitui a anterior do tipo; o histórico guarda contagens por unidade por data de referência.
 
 ## Pendências (perguntas abertas ao usuário)

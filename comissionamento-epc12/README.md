@@ -39,6 +39,12 @@ comissionamento e é alimentado pelas **planilhas Excel** exportadas da FIC. Con
 **Logo:** a logo do Consórcio HC4 vem embutida no programa (barra lateral, ícone da janela e do .exe). Um arquivo
 `logo.png` colocado na pasta do programa a substitui.
 
+**Visual:** identidade HUD monocromática (base branca, preto e cinzas, painéis retos com cantoneiras, textos em caixa-alta).
+As fontes vêm embutidas e só são usadas pelo programa (nada é instalado no Windows): EPC12 Display (derivada da Orbitron,
+com o til corrigido para ler "VISÃO" e não "VISÀO"), Rajdhani, IBM Plex Mono e Share Tech Mono – todas sob licença SIL OFL
+(textos em `comissionamento/recursos/fontes`). Nas pizzas, as quatro primeiras categorias são cinzas sólidos e as demais
+usam texturas (hachura, pontos), iguais na tela e no Excel. O Excel usa Bahnschrift e Consolas, que já vêm no Windows.
+
 Cada importação substitui a anterior do mesmo tipo (a FIC exporta sempre a lista completa) e fica registrada em **Importações**.
 
 ### Linha de comando (automação)
