@@ -1,11 +1,29 @@
 """Fluxos da interface com os diálogos simulados (arquivo escolhido, data confirmada, mensagens capturadas)."""
 import pytest
 
+import time
+
 tk = pytest.importorskip('tkinter')
+
+
+def criar_tk(fabrica, tentativas=3):
+    """Cria a janela Tk. Nos runners Windows do GitHub (Python do hostedtoolcache) o Tcl às vezes falha ao ler o próprio
+    init.tcl ("couldn't read file ... init.tcl": No error) – falha conhecida do ambiente, não do programa
+    (microsoft/azure-pipelines-tasks#16426). Só esse erro é tentado de novo; qualquer outro sobe na hora."""
+    for i in range(tentativas):
+        try:
+            return fabrica()
+        except tk.TclError as e:
+            if 'init.tcl' not in str(e) or i == tentativas - 1:
+                raise
+            time.sleep(0.5)
+
+
 try:
-    _raiz = tk.Tk()
-    _raiz.destroy()
-except tk.TclError:
+    criar_tk(tk.Tk).destroy()
+except tk.TclError as e:
+    if 'init.tcl' in str(e):
+        raise                                   # Tcl quebrado não é "sem display": não pula os testes em silêncio
     pytest.skip('sem display para o Tk', allow_module_level=True)
 
 from comissionamento import gui  # noqa: E402
@@ -19,7 +37,7 @@ def app(tmp_path, monkeypatch):
     for nome in ('showinfo', 'showerror', 'showwarning'):
         monkeypatch.setattr(gui.messagebox, nome, lambda t, m, nome=nome, **k: msgs.append((nome, t, m)))
     monkeypatch.setattr(gui.messagebox, 'askyesno', lambda *a, **k: False)
-    a = gui.App(tmp_path / 'gui.db')
+    a = criar_tk(lambda: gui.App(tmp_path / 'gui.db'))
     a.msgs = msgs
     yield a
     a.sair()
