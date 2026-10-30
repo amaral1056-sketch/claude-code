@@ -181,3 +181,34 @@ def templates_fvm_pdf(caminho, templates):
             pdf.multi_cell(0, 5, linha, new_x='LMARGIN', new_y='NEXT')
     pdf.output(str(caminho))
     return caminho
+
+
+def templates_fvi_pdf(caminho, templates):
+    """PDF no formato do "Template de FVI" da FIC: templates = [(código, classificação, {campo: [perguntas]})].
+    Cada campo (II, III, V) começa numa página nova, com o cabeçalho e o rodapé repetidos, como no original;
+    perguntas longas quebram em várias linhas."""
+    from fpdf import FPDF
+    titulos = {'II': 'II) INSPEÇÃO TÉCNICA', 'III': 'III) INSPEÇÃO MECÂNICA', 'V': 'V) TESTES FUNCIONAIS'}
+    pdf = FPDF()
+    pdf.set_font('Helvetica', size=9)
+
+    def linha(t):
+        pdf.multi_cell(0, 5, t, new_x='LMARGIN', new_y='NEXT')
+    for codigo, classe, campos in templates:
+        for k, (campo, perguntas) in enumerate(campos.items()):
+            pdf.add_page()
+            for t in ('Template de FVI - Folha de Verificação de Item', 'EMPREENDIMENTO TESTE / 0000.0000000.00.0',
+                      f'Template: {codigo}', 'Revisão: 1.0', 'Status: Ativo'):
+                linha(t)
+            if k == 0:
+                for t in ('TAG: SKID:', f'CLASSIFICAÇÃO: {classe} MÓDULO:', 'DISCIPLINA: TESTE RM:',
+                          'I) CARACTERÍSTICAS DO ITEM', 'II) DADOS DO RECEBIMENTO', 'DATA RESPONSÁVEL OBSERVAÇÃO'):
+                    linha(t)
+            linha(titulos[campo])
+            for n, p in enumerate(perguntas, 1):
+                linha(f'{n}) {p}')
+            for t in ('ACEITAÇÃO', 'ATIVIDADE EXECUÇÃO PETROBRAS', 'Emissão: USUÁRIO TESTE Classificação da Informação: TESTE',
+                      '28/10/2026  13:39:59 EMPREENDIMENTO TESTE'):
+                linha(t)
+    pdf.output(str(caminho))
+    return caminho

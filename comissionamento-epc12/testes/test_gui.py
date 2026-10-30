@@ -203,7 +203,7 @@ def test_menus_de_importacao_e_logo(app):
     assert not hasattr(app, 'btn_bases')                                            # só o botão de atualização
     m = app.menu_importar()
     rotulos_menu = [m.entrycget(i, 'label') for i in range(m.index('end') + 1) if m.type(i) == 'command']
-    assert rotulos_menu == ['SOP / SSOP', 'FVM BASE', 'Templates de FVM (PDF)', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
+    assert rotulos_menu == ['SOP / SSOP', 'FVM BASE', 'Templates de FVI / FVM (PDF)', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
     assert app.logo.cget('image') is not None and app.logo.cget('text') == ''       # logo embutida, não o quadrado
 
 
@@ -245,3 +245,24 @@ def test_clique_na_malha_mostra_as_perguntas(app, tmp_path, monkeypatch):
               if isinstance(w, gui.ctk.CTkLabel)]
     assert 'LINHAS: Malha montada.' in textos and 'TAGs: Teste aprovado.' in textos
     assert 'FVM-INS001' in app._janela_folha.lbl_dados.cget('text')
+
+
+def test_clique_na_tag_mostra_as_perguntas_da_classe(app, tmp_path, monkeypatch):
+    escolher(monkeypatch, f.cadastros_basicos(tmp_path / 'b.xlsx', f.BASICOS))
+    app.importar_li()
+    escolher(monkeypatch, f.cadastro(tmp_path / 'c.xlsx', [
+        ('T1', f.S1, '1', 'APROVADO', 'APROVADO', 'ACAMPO3E4', 'N/A', 'N/A', '(007-C) TRANSMISSOR DE PRESSÃO')]))
+    app.importar_fic('FVI')
+    linha = app.fvi['tabela'].linhas[0]
+    app.folha_fvi(linha)                                      # sem templates de FVI: explica o motivo
+    assert 'nenhum PDF de templates de FVI' in app._janela_folha.corpo.winfo_children()[0].cget('text')
+    pdf = f.templates_fvi_pdf(tmp_path / 'fvi.pdf', [
+        ('FVI-007', '(007) TRANSMISSOR DE PROCESSO', {'II': ['Recebido.'], 'III': ['Instalado.'], 'V': ['Testado.']})])
+    monkeypatch.setattr(gui.filedialog, 'askopenfilename', lambda **k: str(pdf))
+    app.importar_templates()
+    app.folha_fvi(linha)
+    filhos = app._janela_folha.corpo.winfo_children()
+    assert 'A CONFIRMAR' in filhos[0].cget('text')            # família da classe: inferência sinalizada
+    textos = [w.cget('text') for lin in filhos for w in lin.winfo_children() if isinstance(w, gui.ctk.CTkLabel)]
+    assert {'Recebido.', 'Instalado.', 'Testado.'} <= set(textos)
+    assert any('status na FIC: ACAMPO3E4' in t for t in textos)   # status do Campo III ao lado do título

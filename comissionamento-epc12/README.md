@@ -24,7 +24,7 @@ comissionamento e é alimentado pelas **planilhas Excel** exportadas da FIC. Con
    | **FVI** | Relatório de Cadastro Geral | por TAG |
    | **FVM BASE** | Relatório de Hierarquia de Malhas | base das FVMs: as malhas, suas TAGs e a SSOP de cada uma; importe antes da FVM |
    | **FVM** | Lista de FVM | atualização: Nº, template e status da FVM de cada malha da base |
-   | **Templates de FVM (PDF)** | Template de FVM – Folha de Verificação de Malhas | as perguntas de cada campo; na página FVM, clique numa malha para vê-las |
+   | **Templates de FVI / FVM (PDF)** | Template de FVI – Folha de Verificação de Item e/ou Template de FVM – Folha de Verificação de Malhas (um PDF de cada vez) | as perguntas de cada campo; nas páginas FVI e FVM, clique numa TAG ou malha para vê-las. Na FVI o template é achado pela classe da TAG |
    | **CCM** | Lista de CCM | por SSOP (inclui registros sem número, ex.: CCMOCULTO) |
    | **TAP** | Lista de TAP | por SOP (o número do TAP é "TAP-" + SOP) |
    | **TTAS** | Lista de TTAS | por SOP |

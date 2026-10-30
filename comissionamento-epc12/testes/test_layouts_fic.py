@@ -170,3 +170,38 @@ def test_pdf_que_nao_e_template_de_fvm_e_recusado(tmp_path):
     pdf.output(str(tmp_path / 'x.pdf'))
     with pytest.raises(ErroImportacao, match='Template de FVM'):
         importacao.ler_templates(tmp_path / 'x.pdf')
+
+
+def test_templates_de_fvi_por_classe(banco, tmp_path):
+    from comissionamento import calculo
+    longa = 'Foi verificada a entrega dos certificados, conforme especificações de compra (ex.: classificação de área, ' \
+            'ensaios de tipo/rotina/especiais e conformidade do material). [reportar em caso de não atendimento]'
+    pdf = f.templates_fvi_pdf(tmp_path / 'fvi.pdf', [
+        ('FVI-032', '(032) TRANSFORMADOR', {'II': ['Recebimento executado.', longa], 'III': ['Montado.'], 'V': ['Testado.']}),
+        ('FVI-007', '(007) TRANSMISSOR DE PROCESSO', {'II': ['Recebido.'], 'III': ['Instalado.', 'Ligado.']}),
+        ('FVI-011', '', {'II': ['Painel recebido.']})])                      # sem classificação no PDF
+    doc, tpls = importacao.ler_templates(pdf)
+    assert doc == 'FVI' and [(t['template'], t['classe']) for t in tpls] == [
+        ('FVI-032', '(032) TRANSFORMADOR'), ('FVI-007', '(007) TRANSMISSOR DE PROCESSO'), ('FVI-011', '')]
+    assert tpls[0]['perguntas'] == [('II', 'II.1', 'Recebimento executado.'), ('II', 'II.2', longa),
+                                    ('III', 'III.1', 'Montado.'), ('V', 'V.1', 'Testado.')]   # cabeçalho/rodapé fora
+    assert servico.importar_templates(banco, pdf) == 'Templates de FVI importados: 3 template(s), 8 pergunta(s).'
+    idx = calculo.indice_templates_fvi(banco.templates('FVI'))
+    casos = {c: (lambda r: (r[0]['template'] if r[0] else None, r[1]))(calculo.template_da_classe(c, idx)) for c in (
+        '(032) TRANSFORMADOR', '(032) TRANSFORMADOR DE POTÊNCIA', '(007-C) TRANSMISSOR DE PRESSÃO',
+        '(011) PAINEL ELÉTRICO AUXILIAR', '(099) OUTRA COISA', '')}
+    assert casos == {'(032) TRANSFORMADOR': ('FVI-032', 'classe'), '(032) TRANSFORMADOR DE POTÊNCIA': ('FVI-032', 'codigo'),
+                     '(007-C) TRANSMISSOR DE PRESSÃO': ('FVI-007', 'familia'),
+                     '(011) PAINEL ELÉTRICO AUXILIAR': ('FVI-011', 'numero'),
+                     '(099) OUTRA COISA': (None, None), '': (None, None)}
+    # Verificação: TAGs sem template e as ligadas por inferência
+    servico.importar_li(banco, f.cadastros_basicos(tmp_path / 'b.xlsx', f.BASICOS))
+    servico.importar_fic(banco, 'FVI', f.cadastro(tmp_path / 'c.xlsx', [
+        ('T1', f.S1, '1', 'APROVADO', 'APROVADO', 'APROVADO', 'N/A', 'APROVADO', '(032) TRANSFORMADOR'),
+        ('T2', f.S1, '2', 'APROVADO', 'APROVADO', 'APROVADO', 'N/A', 'APROVADO', '(007-C) TRANSMISSOR DE PRESSÃO'),
+        ('T3', f.S1, '3', 'APROVADO', 'APROVADO', 'APROVADO', 'N/A', 'APROVADO', '(099) OUTRA COISA')]))
+    R = servico.calcular(banco)
+    v = {t: a for _, t, _, a, _ in R.verificacao}
+    assert v['Templates de FVI – TAGs cuja classe não tem template no PDF'] == 1
+    assert v['Templates de FVI – TAGs ligadas pela família da classe (A CONFIRMAR)'] == 1
+    assert ('FVI', '', '(099) OUTRA COISA', '', 'classe sem template no PDF de templates de FVI (1 TAG(s))') in R.pendencias

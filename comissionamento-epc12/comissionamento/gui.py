@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 import customtkinter as ctk
 from tkinter import font as tkfont
 
-from . import __version__, configuracao, exportacao, rotulos, servico, tema
+from . import __version__, calculo, configuracao, exportacao, rotulos, servico, tema
 from .banco import Banco
 from .graficos import Grafico, Pizza, pct_txt
 from .icones import icone, logo, recurso
@@ -168,29 +168,24 @@ class JanelaFolha(ctk.CTkToplevel):
         self.corpo = ctk.CTkScrollableFrame(self, fg_color=tema.BASE, corner_radius=0)
         self.corpo.pack(fill='both', expand=True, padx=8, pady=8)
 
-    def mostrar(self, linha, tpl):
+    def mostrar(self, titulo, cabecalho, secoes, aviso=''):
+        """secoes = [(título do campo, status da FIC no campo, [(item, texto)])]; aviso: nota acima das perguntas."""
         for w in self.corpo.winfo_children():
             w.destroy()
-        self.lbl_titulo.configure(text=f'FVM // {linha["malha"]}')
-        self.lbl_dados.configure(text=(
-            f'TAG {linha.get("tag") or "–"}   ·   SSOP {linha.get("ssop") or "–"}   ·   Nº da FVM {linha.get("n_fvm") or "–"}'
-            f'   ·   STATUS {linha.get("status") or "sem status"}\n'
-            f'TEMPLATE {linha.get("template") or "–"}' + (f'   ·   REVISÃO {tpl["revisao"]}   ·   {tpl["disciplina"]}' if tpl else '')))
-        if not tpl:
-            motivo = ('a FVM desta malha não informa o template (Lista de FVM)' if not linha.get('template') else
-                      f'o template {linha["template"]} não está no PDF importado (Importar atualização ▸ Templates de FVM)')
-            nota(self.corpo, f'Sem perguntas: {motivo}.', largura=800).pack(fill='x', padx=8, pady=8)
-        else:
-            for campo, titulo in (('III/IV', 'CAMPO III / IV – INSPEÇÃO MECÂNICA'), ('V', 'CAMPO V – TESTES FUNCIONAIS')):
-                perguntas = [(i, tx) for c, i, tx in tpl['perguntas'] if c == campo]
-                titulo_secao(self.corpo, titulo, f'{len(perguntas)} pergunta(s)').pack(fill='x', padx=8, pady=(10, 4))
-                for item, tx in perguntas:
-                    lin = ctk.CTkFrame(self.corpo, fg_color=tema.SUPERFICIE, corner_radius=0)
-                    lin.pack(fill='x', padx=8, pady=1)
-                    ctk.CTkLabel(lin, text=item, width=64, anchor='w', font=tema.cfonte(12, 'bold', 'dado'),
-                                 text_color=tema.TEXTO).pack(side='left', padx=(8, 4), pady=4)
-                    ctk.CTkLabel(lin, text=tx, anchor='w', justify='left', wraplength=700, font=tema.cfonte(11),
-                                 text_color=tema.TEXTO_2).pack(side='left', fill='x', expand=True, padx=(0, 8), pady=4)
+        self.lbl_titulo.configure(text=titulo)
+        self.lbl_dados.configure(text=cabecalho)
+        if aviso:
+            nota(self.corpo, aviso, largura=800).pack(fill='x', padx=8, pady=(8, 0))
+        for titulo_campo, status, perguntas in secoes:
+            titulo_secao(self.corpo, titulo_campo, f'{len(perguntas)} pergunta(s)'
+                         + (f'   ·   status na FIC: {status}' if status is not None else '')).pack(fill='x', padx=8, pady=(10, 4))
+            for item, tx in perguntas:
+                lin = ctk.CTkFrame(self.corpo, fg_color=tema.SUPERFICIE, corner_radius=0)
+                lin.pack(fill='x', padx=8, pady=1)
+                ctk.CTkLabel(lin, text=item, width=64, anchor='w', font=tema.cfonte(12, 'bold', 'dado'),
+                             text_color=tema.TEXTO).pack(side='left', padx=(8, 4), pady=4)
+                ctk.CTkLabel(lin, text=tx, anchor='w', justify='left', wraplength=700, font=tema.cfonte(11),
+                             text_color=tema.TEXTO_2).pack(side='left', fill='x', expand=True, padx=(0, 8), pady=4)
         self.deiconify()
         self.lift()
 
@@ -320,7 +315,7 @@ class App(ctk.CTk):
     def menu_importar(self):
         """Base SOP / SSOP e atualizações da FIC."""
         return self._menu([('SOP / SSOP', self.importar_li), ('FVM BASE', self.importar_fvm_base),
-                           ('Templates de FVM (PDF)', self.importar_templates), None]
+                           ('Templates de FVI / FVM (PDF)', self.importar_templates), None]
                           + [(t, lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_MENU])
 
     def menu_banco(self):
@@ -511,8 +506,9 @@ class App(ctk.CTk):
         self._filtros(f, d)
         nota(f, 'Status como vêm da FIC (Relatório de Cadastro Geral). Linha cinza: TAG sem FVI gerada · '
                 'linha preta: sem SSOP ou SSOP fora da base · texto claro: TAG cancelada. O que conta como aprovado no '
-                'avanço está na página Critérios.').pack(side='bottom', fill='x', pady=(8, 0))
-        d['tabela'] = Tabela(f, rotulos.COL_TAGS)
+                'avanço está na página Critérios. Clique numa TAG para ver as perguntas do template da classe.').pack(
+            side='bottom', fill='x', pady=(8, 0))
+        d['tabela'] = Tabela(f, rotulos.COL_TAGS, ao_clicar=self.folha_fvi)
         d['tabela'].pack(fill='both', expand=True)
 
     def _pg_fvm(self, f):
@@ -525,12 +521,46 @@ class App(ctk.CTk):
         d['tabela'] = Tabela(f, rotulos.COL_MALHAS, ao_clicar=self.folha_fvm)
         d['tabela'].pack(fill='both', expand=True)
 
-    def folha_fvm(self, linha):
-        """Janela com a folha da malha: dados da FVM e as perguntas do template, por campo (III/IV e V)."""
-        tpl = self.banco.templates('FVM').get((linha.get('template') or '').upper())
+    def _janela(self):
         if self._janela_folha is None or not self._janela_folha.winfo_exists():
             self._janela_folha = JanelaFolha(self)
-        self._janela_folha.mostrar(linha, tpl)
+        return self._janela_folha
+
+    def folha_fvm(self, linha):
+        """Folha da malha: dados da FVM e as perguntas do template (Lista de FVM), por campo (III/IV e V)."""
+        tpl = self.banco.templates('FVM').get((linha.get('template') or '').upper())
+        cab = (f'TAG {linha.get("tag") or "–"}   ·   SSOP {linha.get("ssop") or "–"}   ·   Nº da FVM {linha.get("n_fvm") or "–"}'
+               f'   ·   STATUS {linha.get("status") or "sem status"}\nTEMPLATE {linha.get("template") or "–"}'
+               + (f'   ·   REVISÃO {tpl["revisao"]}   ·   {tpl["disciplina"]}' if tpl else ''))
+        if not tpl:
+            motivo = ('a FVM desta malha não informa o template (Lista de FVM)' if not linha.get('template') else
+                      f'o template {linha["template"]} não está no PDF importado (Importar atualização ▸ Templates de FVI / FVM)')
+            self._janela().mostrar(f'FVM // {linha["malha"]}', cab, [], f'Sem perguntas: {motivo}.')
+            return
+        st = linha.get('status') or 'sem status'
+        self._janela().mostrar(f'FVM // {linha["malha"]}', cab, [
+            ('CAMPO III / IV – INSPEÇÃO MECÂNICA', st, [(i, tx) for c, i, tx in tpl['perguntas'] if c == 'III/IV']),
+            ('CAMPO V – TESTES FUNCIONAIS', st, [(i, tx) for c, i, tx in tpl['perguntas'] if c == 'V'])])
+
+    def folha_fvi(self, linha):
+        """Folha da TAG: perguntas do template de FVI da classe da TAG, por campo, com o status da FIC de cada campo."""
+        tpl, modo = calculo.template_da_classe(linha.get('classe') or '',
+                                               calculo.indice_templates_fvi(self.banco.templates('FVI')))
+        cab = (f'CLASSE {linha.get("classe") or "–"}   ·   SSOP {linha.get("ssop") or "–"}   ·   Nº da FVI '
+               f'{linha.get("n_fvi") or "–"}   ·   STATUS FVI {linha.get("st_fvi") or "sem status"}\nTEMPLATE '
+               + (f'{tpl["template"]}   ·   REVISÃO {tpl["revisao"]}   ·   {tpl["classe"] or "sem classificação no PDF"}'
+                  if tpl else '–'))
+        if not tpl:
+            motivo = ('nenhum PDF de templates de FVI importado (Importar atualização ▸ Templates de FVI / FVM)'
+                      if not self.banco.templates('FVI') else 'a classe da TAG não tem template no PDF importado')
+            self._janela().mostrar(f'FVI // {linha["tag"]}', cab, [], f'Sem perguntas: {motivo}.')
+            return
+        aviso = '' if modo in ('classe', 'codigo') else f'Template escolhido por inferência: {calculo.MODOS_TEMPLATE[modo]}.'
+        self._janela().mostrar(f'FVI // {linha["tag"]}', cab, [
+            (titulo, linha.get(col) or 'sem status', [(i, tx) for c, i, tx in tpl['perguntas'] if c == campo])
+            for titulo, campo, col in (('CAMPO II – INSPEÇÃO TÉCNICA', 'II', 'st_cii'),
+                                       ('CAMPO III – INSPEÇÃO MECÂNICA', 'III', 'st_ciii'),
+                                       ('CAMPO V – TESTES FUNCIONAIS', 'V', 'st_cv'))], aviso)
 
     def _pg_doc(self, f, nome, colunas, fonte, campo_situacao):
         d = {'nome': nome, 'fonte': fonte, 'campo_situacao': campo_situacao}
@@ -686,7 +716,7 @@ class App(ctk.CTk):
             messagebox.showinfo('SOP / SSOP importada', msg)
 
     def importar_templates(self):
-        p = filedialog.askopenfilename(title='Selecione o PDF de templates (Template de FVM da FIC)',
+        p = filedialog.askopenfilename(title='Selecione o PDF de templates da FIC (Template de FVI ou de FVM)',
                                        filetypes=[('PDF', '*.pdf'), ('Todos os arquivos', '*.*')])
         if not p:
             return
@@ -694,7 +724,7 @@ class App(ctk.CTk):
         if msg:
             self.atualizar()
             self.status_msg(msg)
-            messagebox.showinfo('Templates importados', msg + '\nNa página FVM, clique numa malha para ver as perguntas.')
+            messagebox.showinfo('Templates importados', msg + '\nNas páginas FVI e FVM, clique numa TAG ou malha para ver as perguntas.')
 
     def importar_fvm_base(self):
         if not self.banco.tem_base():

@@ -6,6 +6,7 @@ Referência de cada regra (planilha original, scripts/02_estrutura.py):
 - abas FVI/FVM/CCM (por SSOP e SOP), TAP e TTAS (por SOP – como numera a FIC), VISAO_GERENCIAL (por unidade, totais ponderados), VERIFICACAO.
 Comparações seguem o Excel: TRIM e sem diferença de maiúsculas/minúsculas (ver texto.py)."""
 import json
+import re
 from collections import defaultdict
 
 from .texto import chave
@@ -47,6 +48,46 @@ def _malhas_em_varias_ssop(regs):
         if chave(r['malha']) and chave(r['ssop']):
             m[chave(r['malha'])].add(chave(r['ssop']))
     return {k: v for k, v in m.items() if len(v) > 1}
+
+
+RE_CODIGO_CLASSE = re.compile(r'\(\s*(\d+[A-Z0-9-]*)\s*\)')
+# como a TAG chegou ao template (classe x Template de FVI); as duas últimas são inferência – A CONFIRMAR
+MODOS_TEMPLATE = {'classe': 'mesma classe', 'codigo': 'mesmo código de classe',
+                  'familia': 'A CONFIRMAR – template da família da classe (código principal)',
+                  'numero': 'A CONFIRMAR – template sem classificação no PDF, pelo número (= código da classe)'}
+
+
+def indice_templates_fvi(tpls):
+    """Índices dos templates de FVI: pelo texto da classe, pelo código da classe e pelo número dos que vêm sem classe."""
+    por_texto, por_codigo, por_numero = {}, {}, {}
+    for t in tpls.values():
+        if t.get('classe'):
+            por_texto.setdefault(chave(t['classe']), t)
+            m = RE_CODIGO_CLASSE.match(t['classe'])
+            if m:
+                por_codigo.setdefault(m.group(1).upper(), t)
+        else:
+            por_numero.setdefault(t['template'].split('-', 1)[-1].upper(), t)
+    return por_texto, por_codigo, por_numero
+
+
+def template_da_classe(classe, indice):
+    """(template, modo) da classe da TAG; (None, None) se nenhum template corresponde."""
+    por_texto, por_codigo, por_numero = indice
+    if chave(classe) in por_texto:
+        return por_texto[chave(classe)], 'classe'
+    m = RE_CODIGO_CLASSE.match((classe or '').strip())
+    if not m:
+        return None, None
+    cod = m.group(1).upper()
+    base = cod.split('-')[0]
+    if cod in por_codigo:
+        return por_codigo[cod], 'codigo'
+    if base in por_codigo:
+        return por_codigo[base], 'familia'
+    if base in por_numero:
+        return por_numero[base], 'numero'
+    return None, None
 
 
 def _descricao(dados):
@@ -405,6 +446,21 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
         teste('FVM', 'FVM – FVMs de malhas que não estão na FVM BASE', c['FVM']['so_status'])
         teste('FVM', 'FVM – malhas da FVM BASE sem FVM na atualização', c['FVM']['sem_status'], None)
         teste('FVM', 'FVM – malhas com mais de uma FVM na atualização', c['FVM']['repetidas'], None)
+    tpl_fvi = dados.get('TEMPLATES_FVI') or {}
+    if tpl_fvi and R.tags:
+        indice = indice_templates_fvi(tpl_fvi)
+        modos, sem = defaultdict(int), defaultdict(int)
+        for t in R.tags:
+            _, modo = template_da_classe(t['classe'], indice)
+            modos[modo] += 1
+            if modo is None:
+                sem[t['classe'] or '(sem classe)'] += 1
+        teste('FVI', 'Templates de FVI – TAGs cuja classe não tem template no PDF', modos[None])
+        teste('FVI', 'Templates de FVI – TAGs ligadas pela família da classe (A CONFIRMAR)', modos['familia'], None)
+        teste('FVI', 'Templates de FVI – TAGs ligadas pelo número de template sem classificação (A CONFIRMAR)',
+              modos['numero'], None)
+        for cl, n_ in sorted(sem.items()):
+            pend.append(('FVI', '', cl, '', f'classe sem template no PDF de templates de FVI ({n_} TAG(s))'))
     for doc in ('FVI', 'FVM', 'CCM', 'TAP', 'TTAS'):
         teste('CRITÉRIOS', f'Lista oficial de status {doc} carregada (códigos)', len(cod[doc]), None)
     return R

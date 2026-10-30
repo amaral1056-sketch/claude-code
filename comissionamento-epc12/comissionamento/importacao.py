@@ -422,17 +422,19 @@ RE_PERGUNTA = re.compile(r'(?<![A-Z0-9.])((?:III|IV|V)\.\d+)\s+(.+?)(?=\s*(?:(?:
 
 
 def ler_templates(arquivo):
-    """PDF "Template de FVM - Folha de Verificação de Malhas" exportado da FIC: uma página (ou mais) por template.
-    Devolve (documento, [{'template', 'revisao', 'disciplina', 'perguntas': [(campo, item, texto)]}])."""
+    """PDF de templates exportado da FIC – "Template de FVM - Folha de Verificação de Malhas" ou "Template de FVI -
+    Folha de Verificação de Item" (este com a CLASSIFICAÇÃO = classe do item). Uma ou mais páginas por template.
+    Devolve (documento, [{'template', 'revisao', 'disciplina', 'classe', 'perguntas': [(campo, item, texto)]}])."""
     from pypdf import PdfReader
     try:
         paginas = [p.extract_text() or '' for p in PdfReader(str(arquivo)).pages]
     except Exception as e:
         raise ErroImportacao(f'Não foi possível ler o PDF {Path(arquivo).name}: {e}') from e
     texto_todo = '\n'.join(paginas)
+    if 'Template de FVI' in texto_todo:
+        return 'FVI', _templates_fvi(paginas)
     if 'Template de FVM' not in texto_todo:
-        raise ErroImportacao('PDF não reconhecido: esperado o "Template de FVM - Folha de Verificação de Malhas" da FIC. '
-                             'Templates de FVI ainda não são lidos – envie um modelo do PDF de FVI com a classe.')
+        raise ErroImportacao('PDF não reconhecido: esperado o "Template de FVM" ou o "Template de FVI" exportado da FIC.')
     blocos = {}
     for pg in paginas:                   # um template pode ocupar mais de uma página: junta pelo código
         m = RE_TEMPLATE.search(pg)
@@ -452,8 +454,46 @@ def ler_templates(arquivo):
                 continue
             vistos.add(item)
             perguntas.append(('V' if item.startswith('V.') else 'III/IV', item, re.sub(r'\s+', ' ', txt).strip()))
-        templates.append({'template': codigo, 'revisao': rev.group(1) if rev else '',
+        templates.append({'template': codigo, 'revisao': rev.group(1) if rev else '', 'classe': '',
                           'disciplina': re.sub(r'\s+', ' ', disc.group(1)).strip() if disc else '', 'perguntas': perguntas})
     if not templates:
         raise ErroImportacao('Nenhum template encontrado no PDF (linha "Template: FVM-...").')
     return 'FVM', templates
+
+
+# seções do Template de FVI -> campo acompanhado (não há Campo IV no modelo)
+SECOES_FVI = (('II) INSPEÇÃO TÉCNICA', 'II'), ('III) INSPEÇÃO MECÂNICA', 'III'), ('V) TESTES FUNCIONAIS', 'V'))
+_CABECALHO_PAGINA = re.compile(r'^(Template de FVI\b.*|.+ / \d{4}\.\d+\.\d+\.\d+|Template:\s*\S+|Revisão:.*|Status:.*|'
+                               r'Emissão:.*|\d\d/\d\d/\d{4}\s+\d\d:\d\d:\d\d.*|LEGENDA:.*)$')
+
+
+def _templates_fvi(paginas):
+    blocos = {}
+    for pg in paginas:
+        m = re.search(r'Template:\s*(FVI-[A-Z0-9]+)', pg)
+        if m:
+            blocos.setdefault(m.group(1), []).append(pg)
+    templates = []
+    for codigo, pgs in blocos.items():
+        cab = pgs[0]
+        rev = re.search(r'Revisão:\s*([\d.]+)', cab)
+        disc = re.search(r'DISCIPLINA:\s*(.*?)\s*RM:', cab)
+        classe = re.search(r'CLASSIFICAÇÃO:\s*(.*?)\s*MÓDULO:', cab)
+        # tira cabeçalho/rodapé repetidos de cada página: uma seção pode continuar na página seguinte
+        corpo = '\n'.join(ln for pg in pgs for ln in pg.splitlines() if not _CABECALHO_PAGINA.match(ln.strip()))
+        perguntas = []
+        for titulo, campo in SECOES_FVI:
+            i = corpo.find(titulo)
+            if i < 0:
+                continue
+            trecho = corpo[i + len(titulo):]
+            fim = trecho.find('ACEITAÇÃO')
+            trecho = trecho[:fim] if fim >= 0 else trecho
+            for num, txt in re.findall(r'(?:^|\n)\s*(\d+)\)\s+(.+?)(?=\n\s*\d+\)\s|\Z)', trecho, re.S):
+                perguntas.append((campo, f'{campo}.{num}', re.sub(r'\s+', ' ', txt).strip()))
+        templates.append({'template': codigo, 'revisao': rev.group(1) if rev else '',
+                          'disciplina': disc.group(1).strip() if disc else '',
+                          'classe': re.sub(r'\s+', ' ', classe.group(1)).strip() if classe else '', 'perguntas': perguntas})
+    if not templates:
+        raise ErroImportacao('Nenhum template encontrado no PDF (linha "Template: FVI-...").')
+    return templates

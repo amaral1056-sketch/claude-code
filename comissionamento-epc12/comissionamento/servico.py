@@ -33,7 +33,7 @@ def importar_fvm_base(banco, arquivo):
 
 
 def importar_templates(banco, arquivo):
-    """PDF de templates da FIC (hoje: Template de FVM): substitui os templates do documento."""
+    """PDF de templates da FIC (Template de FVI ou de FVM): substitui os templates daquele documento."""
     documento, templates = importacao.ler_templates(arquivo)
     banco.substituir_templates(documento, templates, arquivo)
     n = sum(len(t['perguntas']) for t in templates)
@@ -88,6 +88,7 @@ def calcular(banco):
     dados = {t: banco.dados(t) for t in TIPOS_FIC + ('FVM_BASE',)}
     dados['AVISOS_BASE'] = banco.avisos_base()
     dados['TEMPLATES_FVM'] = banco.templates('FVM')
+    dados['TEMPLATES_FVI'] = banco.templates('FVI')
     return calculo.calcular(banco.base(), banco.criterios(), banco.status_fic(), banco.incluir_sem_fvi, dados)
 
 

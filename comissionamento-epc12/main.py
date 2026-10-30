@@ -18,8 +18,8 @@ def linha_de_comando(a):
             print(servico.importar_li(b, a.li))
         if a.fvm_base:
             print(servico.importar_fvm_base(b, a.fvm_base))
-        if a.templates:
-            print(servico.importar_templates(b, a.templates))
+        for arq in a.templates or []:
+            print(servico.importar_templates(b, arq))
         for arq in a.status or []:
             print('status %s: %d códigos' % servico.importar_status(b, arq))
         for tipo, arq in a.importar or []:
@@ -52,7 +52,7 @@ def main():
     ap.add_argument('--banco', help='arquivo do banco de dados (.db)')
     ap.add_argument('--li', help='importar a lista de SOP / SSOP (Lista de Cadastros Básicos da FIC ou LI antiga)')
     ap.add_argument('--fvm-base', help='importar a FVM BASE (Relatório de Hierarquia de Malhas da FIC)')
-    ap.add_argument('--templates', help='importar o PDF de templates da FIC (Template de FVM)')
+    ap.add_argument('--templates', nargs='+', metavar='PDF', help='importar PDFs de templates da FIC (Template de FVI / FVM)')
     ap.add_argument('--status', nargs='+', help='importar listas oficiais STATUS_*.xlsx')
     ap.add_argument('--importar', nargs=2, action='append', metavar=('TIPO', 'ARQUIVO'),
                     help='importar exportação da FIC: TIPO = FVI, FVM, CCM, TAP ou TTAS')

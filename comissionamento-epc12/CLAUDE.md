@@ -21,7 +21,7 @@ comissionamento/padroes.py   critérios padrão e listas oficiais de status (sem
 comissionamento/banco.py     esquema SQLite, critérios, parâmetros, log de importações, histórico, backup
 comissionamento/importacao.py leitura das exportações da FIC: Cadastros Básicos (SOP/SSOP; LI antiga também), Cadastro Geral
                              (FVI), FVM BASE (Hierarquia de Malhas), Lista de FVM, listas de CCM, TAP e TTAS,
-                             PDF "Template de FVM" (perguntas por campo, lido com pypdf)
+                             PDFs "Template de FVI" e "Template de FVM" (perguntas por campo, lidos com pypdf)
 comissionamento/calculo.py   reprodução das fórmulas da planilha (IMP_* auxiliares, abas por SSOP/SOP, visão, verificação)
 comissionamento/servico.py   importar -> gravar -> recalcular -> histórico
 comissionamento/exportacao.py relatório Excel + PDF: só Visão Gerencial, FVI, FVM, CCM, TAP, TTAS, com a logo
@@ -73,8 +73,16 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
   template pela coluna "Código do Template" da Lista de FVM. Clique numa linha da página FVM → JanelaFolha com as perguntas.
   O PDF cola o título na 1ª pergunta do Campo V ("TESTES FUNCIONAISV.7"): o leitor separa antes (teste cobre). Leitor
   conferido contra pdftotext nos 8 templates do modelo (itens e textos iguais). Template usado sem estar no PDF → Verificação.
-- FVI por classe (pedido 30/10): AGUARDA o PDF de templates de FVI com o campo classe – o PDF recebido só tem templates de
-  FVM (8 páginas, nenhum campo classe). Não inventar a correspondência.
+- Templates de FVI (30/10, PDF "Template de FVI - Folha de Verificação de Item", 627 páginas, 284 templates, 6564
+  perguntas): mesmo menu ("Templates de FVI / FVM (PDF)", tipo reconhecido no texto). Cada template: CLASSIFICAÇÃO = classe,
+  seções II) INSPEÇÃO TÉCNICA → Campo II, III) INSPEÇÃO MECÂNICA → Campo III, V) TESTES FUNCIONAIS → Campo V (não há IV),
+  perguntas "N)" (item II.N etc.). Cabeçalho/rodapé de cada página são removidos antes (seção pode mudar de página).
+  Leitor conferido contra pdftotext: 281/284 iguais; os 3 restantes (FVI-011, -272, -280) vêm SEM classificação no PDF.
+  TAG → template (calculo.template_da_classe), nesta ordem: texto da classe igual · mesmo código "(NNN[-X])" · família
+  (código principal, 007-C → 007; A CONFIRMAR) · número do template sem classificação = código (FVI-011 ↔ (011);
+  A CONFIRMAR – evidência: nos 222 templates com código, número = código sempre). Cobertura: modelo 827 TAGs (485 classe,
+  306 família, 36 número, 0 sem template); cadastro antigo 3915 (1195 / 2612 / 108 / 0). Clique numa TAG da página FVI →
+  JanelaFolha com as perguntas por campo e o status da FIC de cada campo; inferência aparece com aviso A CONFIRMAR.
 - Textos ao usuário sempre por extenso ("FVI Campo II", "FVM Campo III", "TTAS 1"), definidos em rotulos.py e
   usados igualmente na tela e no Excel. Ícones só do conjunto de icones.py (mesmo traço).
 - ci/teste_exe.py abre o .exe por linha de comando E a interface (variável EPC12_TESTE_INICIO); não remover.
@@ -110,6 +118,7 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 7. Modelos da FIC recebidos em 29/10 (SOP/SSOP, FVI, FVM, CCM, TAP, TTAS) – leitores ajustados e testados com eles.
 8. SOP / SSOP com status PRONTO (11 SSOP no modelo, exatamente as sem CCM): entram no denominador? Hoje entram.
 9. FVM: resolvida – FVM BASE (hierarquia) + Lista de FVM (status em código).
-12. Perguntas da FVI por classe: falta o PDF de templates de FVI (o recebido em 30/10 só tem FVM).
+12. Templates de FVI: confirmar a regra de família (ex.: (007-C) TRANSMISSOR DE PRESSÃO usa o template (007) TRANSMISSOR
+    DE PROCESSO) e o FVI-011 (sem classificação no PDF) para a classe (011) PAINEL ELÉTRICO AUXILIAR.
 10. 5 SSOP do modelo têm SOP fora da lista (incluídos sem descrição) e diluem o % de TAP/TTAS (14 de 19 SOP) – confirmar.
 11. CCMOCULTO: 3 registros com SSOP fora da lista de SOP / SSOP – SSOP removidas ou faltando na lista?

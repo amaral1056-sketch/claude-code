@@ -82,6 +82,8 @@ class Banco:
             self.con.executescript(ESQUEMA)
             if 'template' not in [r[1] for r in self.con.execute('PRAGMA table_info(fvm_status)')]:
                 self.con.execute('ALTER TABLE fvm_status ADD COLUMN template TEXT')   # código do template da FVM
+            if 'classe' not in [r[1] for r in self.con.execute('PRAGMA table_info(template_pergunta)')]:
+                self.con.execute('ALTER TABLE template_pergunta ADD COLUMN classe TEXT')   # classe do item (FVI)
             if self.meta('versao_esquema') is None:
                 self.definir_meta('versao_esquema', str(VERSAO_ESQUEMA))
                 self.definir_meta('criado_em', agora())
@@ -219,11 +221,15 @@ class Banco:
     # ------------------------------------------------------------------ templates (perguntas de cada campo)
     def substituir_templates(self, documento, templates, arquivo):
         """templates: [{'template', 'revisao', 'disciplina', 'perguntas': [(campo, item, texto)]}] – substitui os do documento."""
-        linhas = [(documento, t['template'], t['revisao'], t['disciplina'], c, i, tx, n)
+        linhas = [(documento, t['template'], t['revisao'], t['disciplina'], c, i, tx, n, t.get('classe', ''))
                   for t in templates for n, (c, i, tx) in enumerate(t['perguntas'])]
+        # template sem pergunta nenhuma ainda precisa constar (classe/disciplina): linha com item vazio
+        linhas += [(documento, t['template'], t['revisao'], t['disciplina'], '', '', '', -1, t.get('classe', ''))
+                   for t in templates if not t['perguntas']]
         with self.con:
             self.con.execute('DELETE FROM template_pergunta WHERE documento = ?', (documento,))
-            self.con.executemany('INSERT INTO template_pergunta VALUES (?, ?, ?, ?, ?, ?, ?, ?)', linhas)
+            self.con.executemany('INSERT INTO template_pergunta (documento, template, revisao, disciplina, campo, item, '
+                                 'texto, ordem, classe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', linhas)
             self._registrar(f'TEMPLATES_{documento}', arquivo, None, len(linhas),
                             f'{len(templates)} template(s): ' + ', '.join(t['template'] for t in templates))
 
@@ -232,8 +238,10 @@ class Banco:
         saida = {}
         for r in self.con.execute('SELECT * FROM template_pergunta WHERE documento = ? ORDER BY template, ordem', (documento,)):
             t = saida.setdefault(r['template'].upper(), {'template': r['template'], 'revisao': r['revisao'],
-                                                          'disciplina': r['disciplina'], 'perguntas': []})
-            t['perguntas'].append((r['campo'], r['item'], r['texto']))
+                                                          'disciplina': r['disciplina'], 'classe': r['classe'] or '',
+                                                          'perguntas': []})
+            if r['item']:
+                t['perguntas'].append((r['campo'], r['item'], r['texto']))
         return saida
 
     def _registrar(self, tipo, arquivo, data_referencia, linhas, observacao):
