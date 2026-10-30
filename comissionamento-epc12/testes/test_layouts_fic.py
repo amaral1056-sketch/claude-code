@@ -133,3 +133,40 @@ def test_banco_antigo_e_migrado(tmp_path):
 def test_li_antiga_continua_aceita(tmp_path):
     linhas, sops, avisos = importacao.ler_sop_ssop(f.li(tmp_path / 'li.xlsx'))
     assert (len(linhas), sops, avisos) == (4, None, [])
+
+
+def test_templates_de_fvm_do_pdf(banco, tmp_path):
+    pdf = f.templates_fvm_pdf(tmp_path / 'tpl.pdf', [
+        ('FVM-INS001', '2.0', 'INSTRUMENTAÇÃO', [('III.1', 'LINHAS: Malha montada.'), ('III.2', 'TAGs: Instrumento instalado.'),
+                                                  ('V.7', 'TAGs: Teste de malha aprovado.'), ('V.8', 'TAGs: Alarme testado.')]),
+        ('FVM-ELE001', '3.0', 'ELÉTRICA', [('III.1', 'LINHAS: Cabo lançado.'), ('V.9', 'TAGs: Blank test aprovado.')])])
+    doc, tpls = importacao.ler_templates(pdf)
+    assert doc == 'FVM' and [t['template'] for t in tpls] == ['FVM-INS001', 'FVM-ELE001']
+    assert (tpls[0]['revisao'], tpls[0]['disciplina']) == ('2.0', 'INSTRUMENTAÇÃO')
+    assert tpls[0]['perguntas'] == [('III/IV', 'III.1', 'LINHAS: Malha montada.'), ('III/IV', 'III.2', 'TAGs: Instrumento instalado.'),
+                                    ('V', 'V.7', 'TAGs: Teste de malha aprovado.'), ('V', 'V.8', 'TAGs: Alarme testado.')]  # V.7 colado
+    assert servico.importar_templates(banco, pdf) == 'Templates de FVM importados: 2 template(s), 6 pergunta(s).'
+    assert banco.templates('FVM')['FVM-ELE001']['perguntas'] == [('III/IV', 'III.1', 'LINHAS: Cabo lançado.'),
+                                                                 ('V', 'V.9', 'TAGs: Blank test aprovado.')]
+    # a malha leva o template da Lista de FVM; template fora do PDF vai para a Verificação
+    servico.importar_li(banco, f.cadastros_basicos(tmp_path / 'b.xlsx', f.BASICOS))
+    base, _ = f.fvm(tmp_path, [('M1', f.P1, f.S1, 'APROVADO'), ('M2', f.P1, f.S1, 'APROVADO')])
+    servico.importar_fvm_base(banco, base)
+    lista = f.provisorio(tmp_path / 'l.xlsx', ['Código FVM', 'Malha', 'Código do Template', 'Status'],
+                         [('1', 'M1', 'FVM-INS001', 'APROVADO'), ('2', 'M2', 'FVM-XYZ001', 'APROVADO')])
+    servico.importar_fic(banco, 'FVM', lista, '30/10/2026')
+    R = servico.calcular(banco)
+    assert {m['malha']: m['template'] for m in R.malhas} == {'M1': 'FVM-INS001', 'M2': 'FVM-XYZ001'}
+    v = {t: a for _, t, _, a, _ in R.verificacao}
+    assert v['FVM – templates usados nas FVMs que não estão no PDF de templates importado'] == 1
+
+
+def test_pdf_que_nao_e_template_de_fvm_e_recusado(tmp_path):
+    from fpdf import FPDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font('Helvetica', size=9)
+    pdf.cell(0, 5, 'Outro documento qualquer')
+    pdf.output(str(tmp_path / 'x.pdf'))
+    with pytest.raises(ErroImportacao, match='Template de FVM'):
+        importacao.ler_templates(tmp_path / 'x.pdf')

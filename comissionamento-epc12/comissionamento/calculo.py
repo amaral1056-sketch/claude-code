@@ -201,6 +201,7 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
         valido = not (cods & canc)
         return {'linha': r['linha'], 'malha': r['malha'], 'tag': tag, 'unidade': ref['unidade'] if ref else '',
                 'sop': ref['sop'] if ref else sop, 'ssop': ssop, 'n_fvm': sm.get('n_fvm', ''), 'status': st,
+                'template': sm.get('template') or '',
                 'ok_ciii': bool(cods & crit['FVM_CIII']) if valido else None,
                 'ok_cv': bool(cods & crit['FVM_CV']) if valido else None,
                 'situacao': 'CANCELADA' if not valido else ('SEM SSOP' if k == '' else ('FORA DA BASE' if ref is None else 'VÁLIDA'))}
@@ -394,6 +395,12 @@ def calcular(base, criterios, status_fic, incluir_sem_fvi, dados):
     teste('FVM', 'FVM – malhas em mais de uma SSOP (pode, mas não deve)', len(multi_fvm))
     if hier:
         teste('FVM', 'FVM BASE – malhas', len(na_hierarquia), None)
+    tpl_fvm = dados.get('TEMPLATES_FVM') or {}
+    if tpl_fvm:
+        sem_tpl = sorted({m['template'] for m in R.malhas if m['template'] and m['template'].upper() not in tpl_fvm})
+        teste('FVM', 'FVM – templates usados nas FVMs que não estão no PDF de templates importado', len(sem_tpl))
+        for t_ in sem_tpl:
+            pend.append(('FVM', '', t_, '', 'template da FVM não está no PDF de templates importado'))
     if st_regs:
         teste('FVM', 'FVM – FVMs de malhas que não estão na FVM BASE', c['FVM']['so_status'])
         teste('FVM', 'FVM – malhas da FVM BASE sem FVM na atualização', c['FVM']['sem_status'], None)

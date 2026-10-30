@@ -149,10 +149,56 @@ def botao_pri(master, texto, ic, comando, **kw):
                          command=comando, **kw)
 
 
+class JanelaFolha(ctk.CTkToplevel):
+    """Folha de verificação de uma malha: cabeçalho (malha, TAG, SSOP, FVM, status, template) e as perguntas do
+    template por campo. Uma janela só, reaproveitada a cada clique."""
+
+    def __init__(self, master):
+        super().__init__(master, fg_color=tema.BASE)
+        self.title('Folha de Verificação de Malha')
+        self.geometry('860x640')
+        self.transient(master)
+        self.lbl_titulo = ctk.CTkLabel(self, text='', font=tema.cfonte(20, 'bold', 'display'), text_color=tema.TEXTO,
+                                       anchor='w')
+        self.lbl_titulo.pack(fill='x', padx=16, pady=(14, 0))
+        self.lbl_dados = ctk.CTkLabel(self, text='', font=tema.cfonte(11, tipo='dado'), text_color=tema.TEXTO_2,
+                                      anchor='w', justify='left')
+        self.lbl_dados.pack(fill='x', padx=16, pady=(2, 8))
+        ctk.CTkFrame(self, height=2, fg_color=tema.LINHA_FORTE, corner_radius=0).pack(fill='x', padx=16)
+        self.corpo = ctk.CTkScrollableFrame(self, fg_color=tema.BASE, corner_radius=0)
+        self.corpo.pack(fill='both', expand=True, padx=8, pady=8)
+
+    def mostrar(self, linha, tpl):
+        for w in self.corpo.winfo_children():
+            w.destroy()
+        self.lbl_titulo.configure(text=f'FVM // {linha["malha"]}')
+        self.lbl_dados.configure(text=(
+            f'TAG {linha.get("tag") or "–"}   ·   SSOP {linha.get("ssop") or "–"}   ·   Nº da FVM {linha.get("n_fvm") or "–"}'
+            f'   ·   STATUS {linha.get("status") or "sem status"}\n'
+            f'TEMPLATE {linha.get("template") or "–"}' + (f'   ·   REVISÃO {tpl["revisao"]}   ·   {tpl["disciplina"]}' if tpl else '')))
+        if not tpl:
+            motivo = ('a FVM desta malha não informa o template (Lista de FVM)' if not linha.get('template') else
+                      f'o template {linha["template"]} não está no PDF importado (Importar atualização ▸ Templates de FVM)')
+            nota(self.corpo, f'Sem perguntas: {motivo}.', largura=800).pack(fill='x', padx=8, pady=8)
+        else:
+            for campo, titulo in (('III/IV', 'CAMPO III / IV – INSPEÇÃO MECÂNICA'), ('V', 'CAMPO V – TESTES FUNCIONAIS')):
+                perguntas = [(i, tx) for c, i, tx in tpl['perguntas'] if c == campo]
+                titulo_secao(self.corpo, titulo, f'{len(perguntas)} pergunta(s)').pack(fill='x', padx=8, pady=(10, 4))
+                for item, tx in perguntas:
+                    lin = ctk.CTkFrame(self.corpo, fg_color=tema.SUPERFICIE, corner_radius=0)
+                    lin.pack(fill='x', padx=8, pady=1)
+                    ctk.CTkLabel(lin, text=item, width=64, anchor='w', font=tema.cfonte(12, 'bold', 'dado'),
+                                 text_color=tema.TEXTO).pack(side='left', padx=(8, 4), pady=4)
+                    ctk.CTkLabel(lin, text=tx, anchor='w', justify='left', wraplength=700, font=tema.cfonte(11),
+                                 text_color=tema.TEXTO_2).pack(side='left', fill='x', expand=True, padx=(0, 8), pady=4)
+        self.deiconify()
+        self.lift()
+
+
 class Tabela(Cartao):
     """Tabela (ttk.Treeview) dentro de um cartão: linhas listradas, cabeçalho clicável para ordenar."""
 
-    def __init__(self, master, colunas, altura=18, ao_duplo_clique=None):
+    def __init__(self, master, colunas, altura=18, ao_duplo_clique=None, ao_clicar=None):
         super().__init__(master)
         self.colunas = colunas
         ids = [k for _, k, _, _ in colunas]
@@ -181,6 +227,9 @@ class Tabela(Cartao):
             self.tree.tag_configure(tag, **kw)
         if ao_duplo_clique:
             self.tree.bind('<Double-1>', lambda ev: self.selecionadas() and ao_duplo_clique(self.selecionadas()[0]))
+        if ao_clicar:           # clique simples numa linha (não no cabeçalho)
+            self.tree.bind('<ButtonRelease-1>', lambda ev: self.tree.identify_region(ev.x, ev.y) == 'cell'
+                           and self.selecionadas() and ao_clicar(self.selecionadas()[0]))
         self.linhas, self._tags, self._ordem = [], None, (None, False)
 
     def preencher(self, linhas, tags=None):
@@ -241,6 +290,7 @@ class App(ctk.CTk):
         self.banco = None
         self.R = None
         self._agendado = None
+        self._janela_folha = None
         self._montar()
         self.protocol('WM_DELETE_WINDOW', self.sair)
         self.abrir_banco(caminho_banco or configuracao.banco_padrao())
@@ -269,7 +319,8 @@ class App(ctk.CTk):
 
     def menu_importar(self):
         """Base SOP / SSOP e atualizações da FIC."""
-        return self._menu([('SOP / SSOP', self.importar_li), ('FVM BASE', self.importar_fvm_base), None]
+        return self._menu([('SOP / SSOP', self.importar_li), ('FVM BASE', self.importar_fvm_base),
+                           ('Templates de FVM (PDF)', self.importar_templates), None]
                           + [(t, lambda t=t: self.importar_fic(t)) for t in servico.TIPOS_MENU])
 
     def menu_banco(self):
@@ -469,10 +520,17 @@ class App(ctk.CTk):
         self._filtros(f, d)
         nota(f, 'Uma linha por TAG da malha. Malhas, TAGs e SSOP: FVM BASE (Relatório de Hierarquia de Malhas) · Nº e status '
                 'da FVM: atualização FVM (Lista de FVM da FIC). Malha em mais de uma SSOP (pode, mas não deve): linha em '
-                'cinza e página Verificação.').pack(
+                'cinza e página Verificação. Clique numa linha para ver as perguntas do template da FVM.').pack(
             side='bottom', fill='x', pady=(8, 0))
-        d['tabela'] = Tabela(f, rotulos.COL_MALHAS)
+        d['tabela'] = Tabela(f, rotulos.COL_MALHAS, ao_clicar=self.folha_fvm)
         d['tabela'].pack(fill='both', expand=True)
+
+    def folha_fvm(self, linha):
+        """Janela com a folha da malha: dados da FVM e as perguntas do template, por campo (III/IV e V)."""
+        tpl = self.banco.templates('FVM').get((linha.get('template') or '').upper())
+        if self._janela_folha is None or not self._janela_folha.winfo_exists():
+            self._janela_folha = JanelaFolha(self)
+        self._janela_folha.mostrar(linha, tpl)
 
     def _pg_doc(self, f, nome, colunas, fonte, campo_situacao):
         d = {'nome': nome, 'fonte': fonte, 'campo_situacao': campo_situacao}
@@ -626,6 +684,17 @@ class App(ctk.CTk):
             self.atualizar()
             self.status_msg(msg)
             messagebox.showinfo('SOP / SSOP importada', msg)
+
+    def importar_templates(self):
+        p = filedialog.askopenfilename(title='Selecione o PDF de templates (Template de FVM da FIC)',
+                                       filetypes=[('PDF', '*.pdf'), ('Todos os arquivos', '*.*')])
+        if not p:
+            return
+        msg = self._executar(lambda: servico.importar_templates(self.banco, p))
+        if msg:
+            self.atualizar()
+            self.status_msg(msg)
+            messagebox.showinfo('Templates importados', msg + '\nNa página FVM, clique numa malha para ver as perguntas.')
 
     def importar_fvm_base(self):
         if not self.banco.tem_base():

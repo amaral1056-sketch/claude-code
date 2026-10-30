@@ -32,7 +32,10 @@ CREATE TABLE IF NOT EXISTS fvi_tag (
     malha TEXT, contrato TEXT, n_fvi TEXT, st_fvi TEXT, st_cii TEXT, st_ciii TEXT, st_civ TEXT, st_cv TEXT,
     dados TEXT);
 CREATE TABLE IF NOT EXISTS fvm (linha INTEGER PRIMARY KEY, malha TEXT, tag TEXT, sop TEXT, ssop TEXT, status_item TEXT);
-CREATE TABLE IF NOT EXISTS fvm_status (linha INTEGER PRIMARY KEY, malha TEXT, n_fvm TEXT, status TEXT);
+CREATE TABLE IF NOT EXISTS fvm_status (linha INTEGER PRIMARY KEY, malha TEXT, n_fvm TEXT, status TEXT, template TEXT);
+CREATE TABLE IF NOT EXISTS template_pergunta (
+    documento TEXT NOT NULL, template TEXT NOT NULL, revisao TEXT, disciplina TEXT, campo TEXT, item TEXT, texto TEXT,
+    ordem INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS ccm (linha INTEGER PRIMARY KEY, numero TEXT, ssop TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS tap (linha INTEGER PRIMARY KEY, numero TEXT, sop TEXT, status TEXT);
 CREATE TABLE IF NOT EXISTS ttas (linha INTEGER PRIMARY KEY, numero TEXT, sop TEXT, status TEXT);
@@ -77,6 +80,8 @@ class Banco:
         with self.con:
             self._migrar()
             self.con.executescript(ESQUEMA)
+            if 'template' not in [r[1] for r in self.con.execute('PRAGMA table_info(fvm_status)')]:
+                self.con.execute('ALTER TABLE fvm_status ADD COLUMN template TEXT')   # código do template da FVM
             if self.meta('versao_esquema') is None:
                 self.definir_meta('versao_esquema', str(VERSAO_ESQUEMA))
                 self.definir_meta('criado_em', agora())
@@ -210,6 +215,26 @@ class Banco:
     def dados(self, tipo):
         tabela = TABELAS_IMPORTACAO[tipo]
         return [dict(r) for r in self.con.execute(f'SELECT * FROM {tabela} ORDER BY linha')]
+
+    # ------------------------------------------------------------------ templates (perguntas de cada campo)
+    def substituir_templates(self, documento, templates, arquivo):
+        """templates: [{'template', 'revisao', 'disciplina', 'perguntas': [(campo, item, texto)]}] – substitui os do documento."""
+        linhas = [(documento, t['template'], t['revisao'], t['disciplina'], c, i, tx, n)
+                  for t in templates for n, (c, i, tx) in enumerate(t['perguntas'])]
+        with self.con:
+            self.con.execute('DELETE FROM template_pergunta WHERE documento = ?', (documento,))
+            self.con.executemany('INSERT INTO template_pergunta VALUES (?, ?, ?, ?, ?, ?, ?, ?)', linhas)
+            self._registrar(f'TEMPLATES_{documento}', arquivo, None, len(linhas),
+                            f'{len(templates)} template(s): ' + ', '.join(t['template'] for t in templates))
+
+    def templates(self, documento):
+        """{código do template (maiúsculas): {'template', 'revisao', 'disciplina', 'perguntas': [(campo, item, texto)]}}"""
+        saida = {}
+        for r in self.con.execute('SELECT * FROM template_pergunta WHERE documento = ? ORDER BY template, ordem', (documento,)):
+            t = saida.setdefault(r['template'].upper(), {'template': r['template'], 'revisao': r['revisao'],
+                                                          'disciplina': r['disciplina'], 'perguntas': []})
+            t['perguntas'].append((r['campo'], r['item'], r['texto']))
+        return saida
 
     def _registrar(self, tipo, arquivo, data_referencia, linhas, observacao):
         self.con.execute('INSERT INTO importacao (tipo, arquivo, importado_em, data_referencia, linhas, observacao) '

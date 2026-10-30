@@ -203,7 +203,7 @@ def test_menus_de_importacao_e_logo(app):
     assert not hasattr(app, 'btn_bases')                                            # só o botão de atualização
     m = app.menu_importar()
     rotulos_menu = [m.entrycget(i, 'label') for i in range(m.index('end') + 1) if m.type(i) == 'command']
-    assert rotulos_menu == ['SOP / SSOP', 'FVM BASE', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
+    assert rotulos_menu == ['SOP / SSOP', 'FVM BASE', 'Templates de FVM (PDF)', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS']
     assert app.logo.cget('image') is not None and app.logo.cget('text') == ''       # logo embutida, não o quadrado
 
 
@@ -222,3 +222,26 @@ def test_modelos_da_fic_pela_tela(app, tmp_path, monkeypatch):
     app.importar_fic('FVM')
     assert sorted((r, n) for r, n, _, _ in app.pizzas['FVM'].fatias) == [('APROVADO', 1), ('Sem status', 1)]
     assert {m['malha'] for m in app.R.malhas} == {'M1', 'M2'}  # M9 não está na FVM BASE: só na Verificação
+
+
+def test_clique_na_malha_mostra_as_perguntas(app, tmp_path, monkeypatch):
+    escolher(monkeypatch, f.cadastros_basicos(tmp_path / 'b.xlsx', f.BASICOS))
+    app.importar_li()
+    base, lista = f.fvm(tmp_path, [('M1', f.P1, f.S1, 'APROVADO')])     # Lista de FVM com template FVM-INS001
+    escolher(monkeypatch, base)
+    app.importar_fvm_base()
+    escolher(monkeypatch, lista, '30/10/2026')
+    app.importar_fic('FVM')
+    app.fvm['tabela'].tree.selection_set('0')
+    app.folha_fvm(app.fvm['tabela'].selecionadas()[0])          # sem templates importados: explica o motivo
+    assert 'não está no PDF importado' in app._janela_folha.corpo.winfo_children()[0].cget('text')
+    pdf = f.templates_fvm_pdf(tmp_path / 'tpl.pdf', [('FVM-INS001', '2.0', 'INSTRUMENTAÇÃO',
+                                                       [('III.1', 'LINHAS: Malha montada.'), ('V.7', 'TAGs: Teste aprovado.')])])
+    monkeypatch.setattr(gui.filedialog, 'askopenfilename', lambda **k: str(pdf))
+    app.importar_templates()
+    assert app.msgs[-1][1] == 'Templates importados'
+    app.folha_fvm(app.fvm['tabela'].linhas[0])
+    textos = [w.cget('text') for lin in app._janela_folha.corpo.winfo_children() for w in lin.winfo_children()
+              if isinstance(w, gui.ctk.CTkLabel)]
+    assert 'LINHAS: Malha montada.' in textos and 'TAGs: Teste aprovado.' in textos
+    assert 'FVM-INS001' in app._janela_folha.lbl_dados.cget('text')

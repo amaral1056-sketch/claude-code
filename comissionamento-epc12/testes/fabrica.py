@@ -159,3 +159,25 @@ def fvm(pasta, linhas):
     base = hierarquia_malhas(pasta / 'fvm_base.xlsx', [(m, 'OPERAÇÃO', filhos) for m, (_, filhos) in malhas.items()])
     lista = lista_fvm(pasta / 'fvm_lista.xlsx', [(str(100 + i), m, st) for i, (m, (st, _)) in enumerate(malhas.items())])
     return base, lista
+
+
+def templates_fvm_pdf(caminho, templates):
+    """PDF no formato do "Template de FVM" da FIC: templates = [(código, revisão, disciplina, [(item, texto)])].
+    Reproduz o texto colado do original ("TESTES FUNCIONAISV.7 ...")."""
+    from fpdf import FPDF
+    pdf = FPDF(orientation='L')
+    pdf.set_font('Helvetica', size=9)
+    for codigo, rev, disc, perguntas in templates:
+        pdf.add_page()
+        for linha in ('Template de FVM - Folha de Verificação de Malhas EMPREENDIMENTO TESTE',
+                      f'Template: {codigo}Revisão: {rev}Status: Ativo',
+                      f'CÓDIGO DA FVM:MALHA:DISCIPLINA: {disc}DOCS REF .:',
+                      'CAMPO III / IV III.1III.1III.2 CAMPO V V.7V.8',
+                      ' III / IV) INSPEÇÃO MECÂNICA ' + ' '.join(f'{i} {t}' for i, t in perguntas if not i.startswith('V.')),
+                      'ACEITAÇÃO OBSERVAÇÕESATIVIDADE EXECUÇÃO',
+                      'V) TESTES FUNCIONAIS' + ' '.join(f'{i} {t}' for i, t in perguntas if i.startswith('V.')),
+                      'ACEITAÇÃO OBSERVAÇÕESATIVIDADE EXECUÇÃO',
+                      'Emissão: USUÁRIO TESTE Classificação da Informação: TESTE Folha: 1 de 1'):
+            pdf.multi_cell(0, 5, linha, new_x='LMARGIN', new_y='NEXT')
+    pdf.output(str(caminho))
+    return caminho

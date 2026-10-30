@@ -1,6 +1,6 @@
 # Controle Gerencial de Comissionamento – EPC 12 (programa desktop)
 
-Programa Windows (Python + CustomTkinter/Pillow + SQLite + openpyxl + fpdf2, empacotado com PyInstaller em um .exe único) que substitui a
+Programa Windows (Python + CustomTkinter/Pillow + SQLite + openpyxl + fpdf2 + pypdf, empacotado com PyInstaller em um .exe único) que substitui a
 geração da planilha `CONTROLE_GERENCIAL_EPC12.xlsx`, mantendo as mesmas regras e números. Idioma: **português do Brasil**.
 
 ## Protocolo de trabalho do usuário (obrigatório)
@@ -20,7 +20,8 @@ comissionamento/texto.py     TRIM e comparação sem caixa (equivalentes ao Exce
 comissionamento/padroes.py   critérios padrão e listas oficiais de status (semeiam o banco novo)
 comissionamento/banco.py     esquema SQLite, critérios, parâmetros, log de importações, histórico, backup
 comissionamento/importacao.py leitura das exportações da FIC: Cadastros Básicos (SOP/SSOP; LI antiga também), Cadastro Geral
-                             (FVI), FVM BASE (Hierarquia de Malhas), Lista de FVM, listas de CCM, TAP e TTAS
+                             (FVI), FVM BASE (Hierarquia de Malhas), Lista de FVM, listas de CCM, TAP e TTAS,
+                             PDF "Template de FVM" (perguntas por campo, lido com pypdf)
 comissionamento/calculo.py   reprodução das fórmulas da planilha (IMP_* auxiliares, abas por SSOP/SOP, visão, verificação)
 comissionamento/servico.py   importar -> gravar -> recalcular -> histórico
 comissionamento/exportacao.py relatório Excel + PDF: só Visão Gerencial, FVI, FVM, CCM, TAP, TTAS, com a logo
@@ -66,6 +67,14 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
   Avanço: cada malha uma vez por SSOP. Rodapé ("Emissão", com o nome do emissor) é descartado. Página FVM: Malha, TAG,
   SSOP, Status da FVM; busca por malha ou TAG; contador = malhas distintas. Pizza da Visão: cada malha uma vez.
   Modelo real: 505 malhas na base = 505 FVMs na lista, todas APROVADO.
+- Templates de FVM (30/10): Importar atualização ▸ Templates de FVM (PDF) lê o "Template de FVM - Folha de Verificação de
+  Malhas" da FIC (uma página por template: código, revisão, disciplina, perguntas III.n do Campo III/IV e V.n do Campo V)
+  para a tabela template_pergunta. O PDF é NP-1: as perguntas ficam só no banco, nunca no repositório. A malha liga ao
+  template pela coluna "Código do Template" da Lista de FVM. Clique numa linha da página FVM → JanelaFolha com as perguntas.
+  O PDF cola o título na 1ª pergunta do Campo V ("TESTES FUNCIONAISV.7"): o leitor separa antes (teste cobre). Leitor
+  conferido contra pdftotext nos 8 templates do modelo (itens e textos iguais). Template usado sem estar no PDF → Verificação.
+- FVI por classe (pedido 30/10): AGUARDA o PDF de templates de FVI com o campo classe – o PDF recebido só tem templates de
+  FVM (8 páginas, nenhum campo classe). Não inventar a correspondência.
 - Textos ao usuário sempre por extenso ("FVI Campo II", "FVM Campo III", "TTAS 1"), definidos em rotulos.py e
   usados igualmente na tela e no Excel. Ícones só do conjunto de icones.py (mesmo traço).
 - ci/teste_exe.py abre o .exe por linha de comando E a interface (variável EPC12_TESTE_INICIO); não remover.
@@ -101,5 +110,6 @@ Rodar: `python -m pytest testes -q` (interface precisa de display; no Linux use 
 7. Modelos da FIC recebidos em 29/10 (SOP/SSOP, FVI, FVM, CCM, TAP, TTAS) – leitores ajustados e testados com eles.
 8. SOP / SSOP com status PRONTO (11 SSOP no modelo, exatamente as sem CCM): entram no denominador? Hoje entram.
 9. FVM: resolvida – FVM BASE (hierarquia) + Lista de FVM (status em código).
+12. Perguntas da FVI por classe: falta o PDF de templates de FVI (o recebido em 30/10 só tem FVM).
 10. 5 SSOP do modelo têm SOP fora da lista (incluídos sem descrição) e diluem o % de TAP/TTAS (14 de 19 SOP) – confirmar.
 11. CCMOCULTO: 3 registros com SSOP fora da lista de SOP / SSOP – SSOP removidas ou faltando na lista?

@@ -23,7 +23,8 @@ comissionamento e é alimentado pelas **planilhas Excel** exportadas da FIC. Con
    | **SOP / SSOP** | Lista de Cadastros Básicos (Código, Descrição, Tipo) | base mestre; importe primeiro. Unidade e SOP de cada SSOP vêm do código |
    | **FVI** | Relatório de Cadastro Geral | por TAG |
    | **FVM BASE** | Relatório de Hierarquia de Malhas | base das FVMs: as malhas, suas TAGs e a SSOP de cada uma; importe antes da FVM |
-   | **FVM** | Lista de FVM | atualização: Nº e status da FVM de cada malha da base |
+   | **FVM** | Lista de FVM | atualização: Nº, template e status da FVM de cada malha da base |
+   | **Templates de FVM (PDF)** | Template de FVM – Folha de Verificação de Malhas | as perguntas de cada campo; na página FVM, clique numa malha para vê-las |
    | **CCM** | Lista de CCM | por SSOP (inclui registros sem número, ex.: CCMOCULTO) |
    | **TAP** | Lista de TAP | por SOP (o número do TAP é "TAP-" + SOP) |
    | **TTAS** | Lista de TTAS | por SOP |

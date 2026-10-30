@@ -32,6 +32,14 @@ def importar_fvm_base(banco, arquivo):
             f'{len({r["ssop"] for r in regs if r["ssop"]})} SSOP.')
 
 
+def importar_templates(banco, arquivo):
+    """PDF de templates da FIC (hoje: Template de FVM): substitui os templates do documento."""
+    documento, templates = importacao.ler_templates(arquivo)
+    banco.substituir_templates(documento, templates, arquivo)
+    n = sum(len(t['perguntas']) for t in templates)
+    return f'Templates de {documento} importados: {len(templates)} template(s), {n} pergunta(s).'
+
+
 def ler_fic(tipo, arquivo):
     """Lê e valida o arquivo sem gravar. Devolve (registros, data_de_emissão|None, info)."""
     if tipo == 'FVI':
@@ -79,6 +87,7 @@ def importar_status(banco, arquivo, tipo=None):
 def calcular(banco):
     dados = {t: banco.dados(t) for t in TIPOS_FIC + ('FVM_BASE',)}
     dados['AVISOS_BASE'] = banco.avisos_base()
+    dados['TEMPLATES_FVM'] = banco.templates('FVM')
     return calculo.calcular(banco.base(), banco.criterios(), banco.status_fic(), banco.incluir_sem_fvi, dados)
 
 

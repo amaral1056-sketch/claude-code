@@ -15,10 +15,15 @@ pasta.mkdir(parents=True, exist_ok=True)
 li = f.cadastros_basicos(pasta / 'sop_ssop.xlsx', f.BASICOS)          # layouts da FIC (Lista de Cadastros Básicos)
 cad = f.cadastro(pasta / 'cad.xlsx', f.TAGS_SINTETICAS)
 fvm_base, fvm = f.fvm(pasta, [('M1', f.P1, f.S1, 'APROVADO')])       # FVM BASE + Lista de FVM
+tpl = f.templates_fvm_pdf(pasta / 'tpl.pdf', [('FVM-INS001', '2.0', 'INSTRUMENTAÇÃO', [('III.1', 'LINHAS: Malha montada.'),
+                                                                                      ('V.7', 'TAGs: Teste aprovado.')])])
 rel = pasta / 'relatorio.xlsx'
 r = subprocess.run([str(exe), '--banco', str(pasta / 'teste.db'), '--li', str(li), '--importar', 'FVI', str(cad),
-                    '--fvm-base', str(fvm_base), '--importar', 'FVM', str(fvm), '--exportar', str(rel)], timeout=300)
+                    '--fvm-base', str(fvm_base), '--templates', str(tpl), '--importar', 'FVM', str(fvm),
+                    '--exportar', str(rel)], timeout=300, capture_output=True, text=True)
+print(r.stdout[-2000:], r.stderr[-2000:])
 assert r.returncode == 0, f'executável terminou com código {r.returncode}'
+assert 'Templates de FVM importados: 1 template(s), 2 pergunta(s).' in r.stdout   # leitura de PDF dentro do .exe
 wb = openpyxl.load_workbook(rel)
 assert wb.sheetnames == ['Visão Gerencial', 'FVI', 'FVM', 'CCM', 'TAP', 'TTAS'], wb.sheetnames
 vg = wb['Visão Gerencial']

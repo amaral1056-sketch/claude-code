@@ -244,7 +244,8 @@ def ler_fvm(arquivo):
     if _localizar_cabecalho(linhas, SPEC_HIERARQUIA)[0] is not None:
         raise ErroImportacao('Este é o Relatório de Hierarquia de Malhas: importe-o em Importar atualização ▸ FVM BASE. '
                              'Em FVM vai a Lista de FVM da FIC. Nada foi gravado.')
-    spec_l = [('n_fvm', True, ('CODIGO FVM', 'CODIGO DA FVM')), ('malha', True, ('MALHA',)), ('status', True, ('STATUS',))]
+    spec_l = [('n_fvm', True, ('CODIGO FVM', 'CODIGO DA FVM')), ('malha', True, ('MALHA',)), ('status', True, ('STATUS',)),
+              ('template', False, ('CODIGO DO TEMPLATE', 'TEMPLATE'))]
     i, pos = _localizar_cabecalho(linhas, spec_l)
     if i is not None:
         return _lista_fvm(linhas, i, pos, aba)
@@ -264,7 +265,8 @@ def _lista_fvm(linhas, i, pos, aba):
             break
         malha = _valor(r, pos, 'malha')
         if malha:
-            regs.append({'linha': n, 'malha': malha, 'n_fvm': _valor(r, pos, 'n_fvm'), 'status': _valor(r, pos, 'status')})
+            regs.append({'linha': n, 'malha': malha, 'n_fvm': _valor(r, pos, 'n_fvm'), 'status': _valor(r, pos, 'status'),
+                         'template': _valor(r, pos, 'template')})
         elif any(texto(x) for x in r):
             ignoradas.append(n)
     if not regs:
@@ -311,7 +313,8 @@ def _status_malhas(linhas, i, pos, aba):
             break
         malha = _valor(r, pos, 'malha')
         if malha and chave(malha) != 'MALHA':
-            regs.append({'linha': n, 'malha': malha, 'n_fvm': _valor(r, pos, 'n_fvm'), 'status': _valor(r, pos, 'status')})
+            regs.append({'linha': n, 'malha': malha, 'n_fvm': _valor(r, pos, 'n_fvm'), 'status': _valor(r, pos, 'status'),
+                         'template': ''})
         elif any(texto(x) for x in r):
             ignoradas.append(n)
     if not regs:
@@ -410,3 +413,47 @@ def ler_status(arquivo):
     if not lista:
         raise ErroImportacao(f'{Path(arquivo).name}: nenhuma linha de código de status (coluna A, a partir da linha 2).')
     return lista
+
+
+# ====================================================================== templates (PDF da FIC)
+RE_TEMPLATE = re.compile(r'Template:\s*(F[A-Z]{2}-[A-Z0-9]+?)\s*(?=Revis|$)', re.M)
+RE_PERGUNTA = re.compile(r'(?<![A-Z0-9.])((?:III|IV|V)\.\d+)\s+(.+?)(?=\s*(?:(?:III|IV|V)\.\d+\s|ACEITA[ÇC][ÃA]O|V\)\s*TESTES|$))',
+                         re.S)
+
+
+def ler_templates(arquivo):
+    """PDF "Template de FVM - Folha de Verificação de Malhas" exportado da FIC: uma página (ou mais) por template.
+    Devolve (documento, [{'template', 'revisao', 'disciplina', 'perguntas': [(campo, item, texto)]}])."""
+    from pypdf import PdfReader
+    try:
+        paginas = [p.extract_text() or '' for p in PdfReader(str(arquivo)).pages]
+    except Exception as e:
+        raise ErroImportacao(f'Não foi possível ler o PDF {Path(arquivo).name}: {e}') from e
+    texto_todo = '\n'.join(paginas)
+    if 'Template de FVM' not in texto_todo:
+        raise ErroImportacao('PDF não reconhecido: esperado o "Template de FVM - Folha de Verificação de Malhas" da FIC. '
+                             'Templates de FVI ainda não são lidos – envie um modelo do PDF de FVI com a classe.')
+    blocos = {}
+    for pg in paginas:                   # um template pode ocupar mais de uma página: junta pelo código
+        m = RE_TEMPLATE.search(pg)
+        if m:
+            blocos.setdefault(m.group(1), []).append(pg)
+    templates = []
+    for codigo, pgs in blocos.items():
+        t = '\n'.join(pgs)
+        rev = re.search(r'Revis[ãa]o:\s*([\d.]+)', t)
+        disc = re.search(r'DISCIPLINA:\s*(.+?)\s*DOCS REF', t, re.S)
+        corpo = t[t.find('INSPEÇÃO MECÂNICA'):] if 'INSPEÇÃO MECÂNICA' in t else ''
+        # o PDF cola o título da seção na 1ª pergunta ("TESTES FUNCIONAISV.7 ..."): separa antes de ler os itens
+        corpo = re.sub(r'(INSPEÇÃO MECÂNICA|TESTES FUNCIONAIS)', r'\1\n', corpo)
+        perguntas, vistos = [], set()
+        for item, txt in RE_PERGUNTA.findall(corpo):
+            if item in vistos:
+                continue
+            vistos.add(item)
+            perguntas.append(('V' if item.startswith('V.') else 'III/IV', item, re.sub(r'\s+', ' ', txt).strip()))
+        templates.append({'template': codigo, 'revisao': rev.group(1) if rev else '',
+                          'disciplina': re.sub(r'\s+', ' ', disc.group(1)).strip() if disc else '', 'perguntas': perguntas})
+    if not templates:
+        raise ErroImportacao('Nenhum template encontrado no PDF (linha "Template: FVM-...").')
+    return 'FVM', templates
