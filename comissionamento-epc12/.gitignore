@@ -1,0 +1,7 @@
+dados/
+*.db
+__pycache__/
+*.pyc
+build/
+dist/
+~$*
